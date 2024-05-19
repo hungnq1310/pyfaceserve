@@ -5,7 +5,7 @@ import base64
 from io import BytesIO
 
 
-def crops(image, bbox):
+def crop_image(image, bbox):
     h, w = image.shape[:2]
     x1, y1, x2, y2 = bbox
     x1 = int(max(0, x1))
