@@ -1,10 +1,11 @@
 import os
 from qdrant_client.http import models
 from qdrant_client import QdrantClient
-from .abc import FaceDatabaseInterface
+
+from .interface import InterfaceDatabase
 
 
-class QdrantFaceDatabase(FaceDatabaseInterface):
+class QdrantFaceDatabase(InterfaceDatabase):
     def __init__(
         self,
         host=os.getenv("QDRANT_HOST", "localhost"),
