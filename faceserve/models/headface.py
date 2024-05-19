@@ -1,9 +1,9 @@
 import numpy as np
-import math
 import cv2
 
+from .interface import InterfaceModel
 
-class HeadFace:
+class HeadFace(InterfaceModel):
     def __init__(self, model_path):
         self.load_model(model_path)
         
@@ -100,3 +100,9 @@ class HeadFace:
         bboxes, scores, labels, kpts = self.post_process(pred, ratio, dwdh, get_layer=get_layer)
         #
         return bboxes, scores, labels, kpts
+    
+    def get_features(self, *args, **kwargs):
+        ...
+
+    def forward(self, *args, **kwargs):
+        ...
