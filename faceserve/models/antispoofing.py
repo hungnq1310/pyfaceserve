@@ -1,8 +1,9 @@
+from typing import Any
 import cv2
 import numpy as np
 import onnxruntime as ort
 
-from faceserve.utils import image, face
+from faceserve.utils import crop_image, align_5_points
 
 from .interface import InterfaceModel
 
@@ -21,9 +22,9 @@ class SpoofingNet(InterfaceModel):
         _, h, w, _ = self.model.get_inputs()[0].shape
         self.model_input_size = (w, h)
 
-    def load_model(self, model_path: str) -> ort.InferenceSession:
+    def load_model(self, path: str) -> ort.InferenceSession:
         return ort.InferenceSession(
-            model_path,
+            path,
             sess_options=sess_options,
             providers=[
                 "CUDAExecutionProvider",
@@ -31,20 +32,20 @@ class SpoofingNet(InterfaceModel):
             ],
         )
 
-    def preprocess(self, img, xyxys, kpts):
+    def preprocess(self, image, xyxys, kpts):
         crops = []
-        h, w = img.shape[:2]
+        h, w = image.shape[:2]
         
         # dets are of different sizes so batch preprocessing is not possible
         for box, kpt in zip(xyxys, kpts):
             x1, y1, x2, y2 = box
-            crop = image.crops(img, box)
+            crop = crop_image(image, box)
             # Align face
             # Scale the keypoints to the face size
             kpt[::3] = kpt[::3] - x1
             kpt[1::3] = kpt[1::3] - y1
             #
-            crop = face.align_5_points(crop, kpt)
+            crop = align_5_points(crop, kpt)
             #
             crop = cv2.resize(crop, self.model_input_size)
             crop = (crop - 127.5) * 0.0078125
@@ -54,20 +55,23 @@ class SpoofingNet(InterfaceModel):
         crops = np.concatenate(crops, axis=0)
         return crops
 
-    def forward(self, crops):
+    def forward(self, images):
         result = self.model.run(
-            [self.output_name], {self.input_name: crops.astype("float32")}
+            [self.output_name], {self.input_name: images.astype("float32")}
         )
         return result[0]
 
-    def get_features(self, img, xyxys, kpts):
+    def get_features(self, image, xyxys, kpts):
         if len(xyxys) == 0:
             return np.array([])
         
-        crops = self.preprocess(img, xyxys, kpts)
+        crops = self.preprocess(image, xyxys, kpts)
         result = self.forward(crops)
         
         return result
+    
+    def postprocess(self, image: Any, **kwargs) -> Any:
+        ...
     
     # def test(self, img):
     #     def softmax(x):
