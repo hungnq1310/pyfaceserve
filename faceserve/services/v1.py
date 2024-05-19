@@ -1,37 +1,36 @@
 import hashlib
 import numpy as np
-from fastapi import *
+from fastapi import HTTPException, status
 from pathlib import Path
-from pydantic import BaseModel
-from gfn.db import FaceDatabaseInterface
-from gfn.models import HeadFace, SpoofingNet, GhostFaceNet
 
+from faceserve.db.interface import InterfaceDatabase
+from faceserve.models.interface import InterfaceModel 
+
+from .interface import InterfaceService
 
 def softmax(x):
     return np.exp(x) / np.sum(np.exp(x))
 
 
-class FaceServiceV1:
+class FaceServiceV1(InterfaceService):
+
     def __init__(
         self,
-        detection,
-        detection_thresh,
-        spoofing,
-        spoofing_thresh,
-        recognition,
-        recognition_thresh,
-        facedb,
+        detection: InterfaceModel,
+        detection_thresh: int,
+        spoofing: InterfaceModel,
+        spoofing_thresh: int,
+        recognition: InterfaceModel,
+        recognition_thresh: int,
+        facedb: InterfaceDatabase,
     ) -> None:
-        self.facedb: FaceDatabaseInterface = facedb
-        #
-        self.detection: HeadFace = detection
-        self.detection_thresh: int = detection_thresh
-        #
-        self.spoofing: SpoofingNet = spoofing
-        self.spoofing_thresh: int = spoofing_thresh
-        #
-        self.recognition: GhostFaceNet = recognition
-        self.recognition_thresh: int = recognition_thresh
+        self.facedb = facedb
+        self.detection = detection
+        self.detection_thresh = detection_thresh
+        self.spoofing = spoofing
+        self.spoofing_thresh = spoofing_thresh
+        self.recognition = recognition
+        self.recognition_thresh = recognition_thresh
 
     def get_face_embs(self, images):
         #
@@ -61,7 +60,7 @@ class FaceServiceV1:
 
     def validate(self, id: str, images):
         if id not in self.facedb.list_person():
-            raise HTTPException(status.HTTP_404_NOT_FOUND, f"ID not found.")
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "ID not found.")
         #
         res, imgs = self.get_face_embs(images)
         if len(imgs) >= len(images) / 2:
@@ -69,7 +68,7 @@ class FaceServiceV1:
         else:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
-                f"Your face images is not valid, please try again.",
+                "Your face images is not valid, please try again.",
             )
 
     def register(self, id: str, images, face_folder: Path):
