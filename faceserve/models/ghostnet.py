@@ -1,3 +1,4 @@
+from typing import Any
 import cv2
 import numpy as np
 import onnxruntime as ort
@@ -12,6 +13,8 @@ sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_AL
 
 
 class GhostFaceNet(InterfaceModel):
+    '''GhostFaceNet'''
+
     def __init__(self, model_path) -> None:
         self.model = self.load_model(model_path)
         self.input_name = self.model.get_inputs()[0].name
@@ -20,9 +23,9 @@ class GhostFaceNet(InterfaceModel):
         _, h, w, _ = self.model.get_inputs()[0].shape
         self.model_input_size = (w, h)
 
-    def load_model(self, model_path: str | bytes | os.PathLike) -> ort.InferenceSession:
+    def load_model(self, path: str | bytes | os.PathLike) -> ort.InferenceSession:
         return ort.InferenceSession(
-            model_path,
+            path,
             sess_options=sess_options,
             providers=[
                 "CUDAExecutionProvider",
@@ -30,9 +33,9 @@ class GhostFaceNet(InterfaceModel):
             ],
         )
 
-    def preprocess(self, img, xyxys, kpts):
+    def preprocess(self, image, xyxys, kpts):
         crops = []
-        h, w = img.shape[:2]
+        h, w = image.shape[:2]
         # dets are of different sizes so batch preprocessing is not possible
         for box, kpt in zip(xyxys, kpts):
             x1, y1, x2, y2 = box
@@ -43,7 +46,7 @@ class GhostFaceNet(InterfaceModel):
             y2 = int(min(h, y2))
 
             box = [x1, y1, x2, y2]
-            crop = img[y1:y2, x1:x2]
+            crop = image[y1:y2, x1:x2]
             # Align face
             # Scale the keypoints to the face size
             kpt[::3] = kpt[::3] - x1
@@ -59,17 +62,20 @@ class GhostFaceNet(InterfaceModel):
         crops = np.concatenate(crops, axis=0)
         return crops
 
-    def forward(self, crops):
+    def forward(self, images):
         embeddings = self.model.run(
-            [self.output_name], {self.input_name: crops.astype("float32")}
+            [self.output_name], {self.input_name: images.astype("float32")}
         )[0]
         return embeddings
 
-    def get_features(self, img, xyxys, kpts):
+    def get_features(self, image, xyxys, kpts):
         if len(xyxys) == 0:
             return np.array([])
         
-        crops = self.preprocess(img, xyxys, kpts)
+        crops = self.preprocess(image, xyxys, kpts)
         embeddings = self.forward(crops)
         embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
         return embeddings
+    
+    def postprocess(self, image: Any, **kwargs) -> Any:
+        ...
