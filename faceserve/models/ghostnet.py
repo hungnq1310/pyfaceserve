@@ -1,19 +1,27 @@
 import cv2
 import numpy as np
 import onnxruntime as ort
+import os
 
-from gfn.utils import image, face
+from faceserve.utils import face
+
+from .interface import InterfaceModel
 
 sess_options = ort.SessionOptions()
 sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 
 
-class GhostFaceNet:
+class GhostFaceNet(InterfaceModel):
     def __init__(self, model_path) -> None:
-        self.load_model(model_path)
+        self.model = self.load_model(model_path)
+        self.input_name = self.model.get_inputs()[0].name
+        self.output_name = self.model.get_outputs()[0].name
 
-    def load_model(self, model_path: str):
-        self.model = ort.InferenceSession(
+        _, h, w, _ = self.model.get_inputs()[0].shape
+        self.model_input_size = (w, h)
+
+    def load_model(self, model_path: str | bytes | os.PathLike) -> ort.InferenceSession:
+        return ort.InferenceSession(
             model_path,
             sess_options=sess_options,
             providers=[
@@ -21,10 +29,6 @@ class GhostFaceNet:
                 "CPUExecutionProvider",
             ],
         )
-        self.input_name = self.model.get_inputs()[0].name
-        self.output_name = self.model.get_outputs()[0].name
-        _, h, w, _ = self.model.get_inputs()[0].shape
-        self.model_input_size = (w, h)
 
     def preprocess(self, img, xyxys, kpts):
         crops = []
