@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 
+class InterfaceDatabase(ABC):
+    '''Interface for Database'''
 
-class FaceDatabaseInterface(ABC):
     @abstractmethod
     def create_person(self, person_id):
         return NotImplemented
