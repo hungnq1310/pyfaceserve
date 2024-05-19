@@ -4,17 +4,19 @@ import cv2
 from .interface import InterfaceModel
 
 class HeadFace(InterfaceModel):
+    '''HeadFace'''
+
     def __init__(self, model_path):
         self.load_model(model_path)
         
-    def load_model(self, model_path):
-        model_type = model_path.split(".")[-1]
+    def load_model(self, path):
+        model_type = path.split(".")[-1]
         
         if model_type == "onnx":
             import onnxruntime as ort
 
             self.model = ort.InferenceSession(
-                model_path,
+                path,
                 providers=[
                     "CUDAExecutionProvider",
                     "CPUExecutionProvider",
@@ -23,13 +25,13 @@ class HeadFace(InterfaceModel):
         elif model_type == 'pt':
             import torch
 
-            self.model = torch.load(model_path)
+            self.model = torch.load(path)
         else:
             raise ValueError("Model type not supported")
         
-    def preprocess(self, im, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleup=True, stride=32):
+    def preprocess(self, image, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleup=True, stride=32):
         # Resize and pad image while meeting stride-multiple constraints
-        shape = im.shape[:2]  # current shape [height, width]
+        shape = image.shape[:2]  # current shape [height, width]
         
         if isinstance(new_shape, int):
             new_shape = (new_shape, new_shape)
@@ -50,24 +52,24 @@ class HeadFace(InterfaceModel):
         dh /= 2
 
         if shape[::-1] != new_unpad:  # resize
-            im = cv2.resize(im, new_unpad, interpolation=cv2.INTER_LINEAR)
+            image = cv2.resize(image, new_unpad, interpolation=cv2.INTER_LINEAR)
             
         top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
         left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-        im = cv2.copyMakeBorder(im, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
+        image = cv2.copyMakeBorder(image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
         
-        im = im.transpose((2, 0, 1))
-        im = np.expand_dims(im, 0)
-        im = np.ascontiguousarray(im, dtype=np.float32)
-        im /= 255
+        image = image.transpose((2, 0, 1))
+        image = np.expand_dims(image, 0)
+        image = np.ascontiguousarray(image, dtype=np.float32)
+        image /= 255
         
-        return im, r, (dw, dh)
+        return image, r, (dw, dh)
     
-    def post_process(self, pred, ratio, dwdh, conf_thre = 0.7, conf_kpts=0.9, get_layer=None):
+    def post_process(self, image, ratio, dwdh, conf_thre = 0.7, conf_kpts=0.9, get_layer=None):
         """_summary_
 
         Args:
-            pred (_type_): _description_
+            image (_type_): _description_
             conf_thre (float, optional): _description_. Defaults to 0.7.
             conf_kpts (float, optional): _description_. Defaults to 0.9.
             get_layer (str, optional): _description_. Defaults to 'face'.
@@ -76,13 +78,13 @@ class HeadFace(InterfaceModel):
             _type_: [bbox, score, class_name]
         """
         
-        if isinstance(pred, list):
-            pred = np.array(pred)
+        if isinstance(image, list):
+            image = np.array(image)
             
         padding = dwdh*2
-        det_bboxes, det_scores, det_labels  = pred[:, 1:5], pred[:, 6], pred[:, 5]
+        det_bboxes, det_scores, det_labels  = image[:, 1:5], image[:, 6], image[:, 5]
         if get_layer == 'face':
-            kpts = pred[:, 7:]
+            kpts = image[:, 7:]
             
         det_bboxes = (det_bboxes[:, 0::] - np.array(padding)) /ratio
         if get_layer == 'face':
@@ -101,8 +103,8 @@ class HeadFace(InterfaceModel):
         #
         return bboxes, scores, labels, kpts
     
-    def get_features(self, *args, **kwargs):
+    def get_features(self, image, **kwargs):
         ...
 
-    def forward(self, *args, **kwargs):
+    def forward(self, images, **kwargs):
         ...
