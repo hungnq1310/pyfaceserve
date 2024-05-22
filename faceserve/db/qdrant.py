@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 from qdrant_client.http import models
 from qdrant_client import QdrantClient
 
@@ -10,10 +11,22 @@ class QdrantFaceDatabase(InterfaceDatabase):
         self,
         host=os.getenv("QDRANT_HOST", "localhost"),
         port=os.getenv("QDRANT_PORT", 6333),
+        url: Optional[str] = None,
+        api_key: Optional[str] = None,
     ) -> None:
-        self._client = QdrantClient(host=host, port=port)
+        self._client = self.connect_client(host, port, url, api_key)
 
-    def create_person(self, person_id):
+    def connect_client(self, host, port, url, api_key):
+        if url is not None and api_key is not None:
+            # cloud instance
+            return QdrantClient(url=url, api_key=api_key)
+        elif url is not None:
+            # local instance with differ url
+            return QdrantClient(url=url)
+        else:
+            return QdrantClient(host=host, port=port)
+
+    def insert_person(self, person_id):
         self._client.create_collection(
             collection_name=person_id,
             vectors_config=models.VectorParams(
