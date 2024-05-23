@@ -66,26 +66,67 @@ class QdrantFaceDatabase(InterfaceDatabase):
             ],
         )
 
-    def list_person(self):
-        ids = self._client.get_collections().collections
-        ids = [i.name for i in ids]
-        return ids
-
-    def delete_person(self, person_id):
-        self._client.delete_collection(person_id)
-
-    def insert_face(self, person_id, face_id, face_emb):
-        self._client.upsert(
-            collection_name=person_id,
-            points=[models.PointStruct(id=face_id, vector=face_emb)],
+    #TODO: change method for below functions
+    def list_person(self, collection_name):
+        '''List all faces of a given person in collection'''
+        return self._client.scroll(
+            collection_name=f"{collection_name}",
+            limit=1000
         )
 
-    def list_face(self, person_id):
-        return self._client.scroll(collection_name=person_id, limit=1000)
+    def delete_person(self, person_id, collection_name):
+        '''Delete all faces of a given person in collection'''
+        self._client.delete(
+            collection_name=f"{collection_name}",
+            points_selector=models.FilterSelector(
+                filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="person_id",
+                            match=models.MatchValue(value=f"{person_id}"),
+                        ),
+                    ],
+                )
+            ),
+        )
 
-    def delete_face(self, person_id, face_id):
-        self._client.delete_vectors(
-            collection_name=person_id, points_selector=models.PointIdsList([face_id])
+    def insert_face(self, person_id, face_id, face_emb, student_id, group_id):    
+        '''Insert a face of a person to collection'''
+        self._client.upsert(
+            collection_name=person_id,
+            points=[models.PointStruct(
+                id=face_id, 
+                vector=face_emb, 
+                payload={
+                    'student_id': student_id,
+                    'group_id': group_id,
+                }
+            )],
+        )
+
+    def list_face(self, person_id, collection_name):
+        '''List all faces of a given person in collection'''
+        return self._client.scroll(
+            collection_name=f"{collection_name}",
+            scroll_filter=models.Filter(
+                must_not=[
+                    models.Filter(
+                        must=[
+                            models.FieldCondition(
+                                key="student_id", match=models.MatchValue(value=f"{person_id}")
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+        )
+
+    def delete_face(self, face_id, collection_name):
+        self._client.delete(
+            collection_name=collection_name, 
+            points_selector=models.PointIdsList(
+                points=[face_id]
+            )
         )
 
     def check_face(self, person_id, face_emb, thresh):
