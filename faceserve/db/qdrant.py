@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Optional, Any, List, Tuple
 from qdrant_client.http import models
 from qdrant_client import QdrantClient
 
@@ -25,13 +25,45 @@ class QdrantFaceDatabase(InterfaceDatabase):
             return QdrantClient(url=url)
         else:
             return QdrantClient(host=host, port=port)
+        
+    def create_colection(self, collection_name, dimension=512, distance='cosine') -> None:
+        # resolve distance
+        if distance == 'euclidean':
+            distance = models.Distance.EUCLID
+        elif distance == 'dot':
+            distance = models.Distance.DOT
+        elif distance == 'manhattan':
+            distance = models.Distance.MANHATTAN
+        else: 
+            distance = models.Distance.COSINE
 
-    def insert_person(self, person_id):
         self._client.create_collection(
-            collection_name=person_id,
+            collection_name=collection_name,
             vectors_config=models.VectorParams(
-                size=512, distance=models.Distance.COSINE
+                size=dimension, distance=distance
             ),
+        )
+
+    def insert_person(
+        self, 
+        collection_name,
+        data_face: List[Tuple[str, List[Any]]], 
+        student_id: str, 
+        group_id: str, 
+    ):
+        '''Insert list of faces of a person to collection'''
+        self._client.upsert(
+            collection_name=collection_name,
+            points=[
+                models.PointStruct(
+                    id=hash_id, 
+                    vector=face_emb,
+                    payload={
+                        'student_id': student_id,
+                        'group_id': group_id,
+                    }
+                ) for hash_id, face_emb in data_face 
+            ],
         )
 
     def list_person(self):
