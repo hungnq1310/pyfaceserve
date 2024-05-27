@@ -1,7 +1,5 @@
 from typing import List, Any
 from abc import ABC, abstractmethod
-from pathlib import Path
-
 
 class InterfaceService(ABC):
     '''Interface for Face Recognition Service'''
