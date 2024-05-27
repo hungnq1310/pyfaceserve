@@ -62,7 +62,7 @@ class FaceServiceV1(InterfaceService):
         if id not in self.facedb.list_person():
             raise HTTPException(status.HTTP_404_NOT_FOUND, "ID not found.")
         #
-        res, imgs = self.get_face_embs(images)
+        res, imgs = self.get_face_emb(images)
         if len(imgs) >= len(images) / 2:
             return res, imgs
         else:
