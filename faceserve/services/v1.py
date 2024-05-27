@@ -32,10 +32,10 @@ class FaceServiceV1(InterfaceService):
         self.recognition = recognition
         self.recognition_thresh = recognition_thresh
 
-    def get_face_embs(self, images):
+    def get_face_emb(self, images):
         #
         if isinstance(images, list):
-            res, imgs, temp = list(), list(), [self.get_face_embs(x) for x in images]
+            res, imgs, temp = list(), list(), [self.get_face_emb(x) for x in images]
             for i in range(len(temp)):
                 box, emb = temp[i]
                 if emb is not None:
@@ -58,7 +58,7 @@ class FaceServiceV1(InterfaceService):
                     return boxes[0], None
             return None, None
 
-    def validate(self, id: str, images):
+    def validate_face(self, id: str, images):
         if id not in self.facedb.list_person():
             raise HTTPException(status.HTTP_404_NOT_FOUND, "ID not found.")
         #
@@ -71,8 +71,8 @@ class FaceServiceV1(InterfaceService):
                 "Your face images is not valid, please try again.",
             )
 
-    def register(self, id: str, images, face_folder: Path):
-        res, imgs = self.validate(id, images)
+    def register_face(self, id: str, images, face_folder: Path):
+        res, imgs = self.validate_face(id, images)
         #
         folder = face_folder.joinpath(f"{id}")
         folder.mkdir(exist_ok=True)
@@ -88,8 +88,8 @@ class FaceServiceV1(InterfaceService):
             response.append(hash)
         return response
 
-    def check(self, id: str, images, thresh):
-        res, imgs = self.validate(id, images)
+    def check_face(self, id: str, images, thresh):
+        res, imgs = self.validate_face(id, images)
         #
         checked = [self.facedb.check_face(id, x, thresh) for x in res]
         checked = [x for x in checked if x is True]
