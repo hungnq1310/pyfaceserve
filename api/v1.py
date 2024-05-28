@@ -4,7 +4,7 @@ import base64
 import pathlib
 from PIL import Image
 from io import BytesIO
-from fastapi import HTTPException, status, APIRouter
+from fastapi import APIRouter, HTTPException, status
 
 from faceserve.services.v1 import FaceServiceV1
 from faceserve.models import HeadFace, SpoofingNet, GhostFaceNet
@@ -53,14 +53,14 @@ async def get_id():
     return json.dumps(FACES.list_person())
 
 
-@router.post("/id")
-async def create_id(id: str):
-    try:
-        FACES.insert_person(person_id=id)
-    except:
-        raise HTTPException(
-            status_code=status.HTTP_406_NOT_ACCEPTABLE, detail="Cannot create ID"
-        )
+# @router.post("/id")
+# async def create_id(id: str, files: List[UploadFile]):
+#     try:
+#         FACES.insert_person(person_id=id)
+#     except:
+#         raise HTTPException(
+#             status_code=status.HTTP_406_NOT_ACCEPTABLE, detail="Cannot create ID"
+#         )
 
 
 @router.post("/register")
@@ -72,11 +72,11 @@ async def register(id: str, request: FaceRequest):
     return images
 
 
-@router.get("/register")
+@router.get("/person-faces/{id}")
 async def get_face_image(id: str):
-    if id not in FACES.list_person():
+    if FACES.list_face(id)[0] is not None:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=f"ID {id} is not founded"
+            status_code=status.HTTP_403_FORBIDDEN, detail=f"Person ID {id} is not founded"
         )
     # res = [f'/imgs/{id}/{k}' for k in os.listdir(FACES_IMG_DIR.joinpath(f'{id}')) if k.endswith(".jpg")]
     res = ["".join(x.id.split("-")) for x in FACES.list_face(id)[0] if x is not None]
