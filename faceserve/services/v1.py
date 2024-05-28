@@ -17,11 +17,11 @@ class FaceServiceV1(InterfaceService):
     def __init__(
         self,
         detection: InterfaceModel,
-        detection_thresh: int,
+        detection_thresh: float,
         spoofing: InterfaceModel,
-        spoofing_thresh: int,
+        spoofing_thresh: float,
         recognition: InterfaceModel,
-        recognition_thresh: int,
+        recognition_thresh: float,
         facedb: InterfaceDatabase,
     ) -> None:
         self.facedb = facedb
