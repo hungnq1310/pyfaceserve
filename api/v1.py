@@ -3,53 +3,49 @@ import json
 import base64
 import pathlib
 from PIL import Image
-from fastapi import *
-from pydantic import BaseModel
+from io import BytesIO
+from fastapi import HTTPException, status, APIRouter
+
 from faceserve.services.v1 import FaceServiceV1
 from faceserve.models import HeadFace, SpoofingNet, GhostFaceNet
 from faceserve.db.qdrant import QdrantFaceDatabase
-from io import BytesIO
+from faceserve.schema.face_request import FaceRequest
 
 """
 Load models and thresh.
 """
-# For face storage.
+# Model
+DETECTION = HeadFace(os.getenv("DETECTION_MODEL_PATH", default="weights/yolov7-hf-v1.onnx"))
+SPOOFING = SpoofingNet(os.getenv("SPOOFING_MODEL_PATH", default="weights/OCI2M.onnx"))
+RECOGNITION = GhostFaceNet(os.getenv("RECOGNITION_MODEL_PATH", default="weights/ghostnetv1.onnx"))
+# Threshold
+DETECTION_THRESH = os.getenv("DETECTION_THRESH", default=0.5)
+SPOOFING_THRESH = os.getenv("SPOOFING_THRESH", default=0.6)
+RECOGNITION_THRESH = os.getenv("RECOGNITION_THRESH", default=0.3)
+# Face db storage.
 FACES = QdrantFaceDatabase(
     collection_name="faces_collection",
 )
 FACES_IMG_DIR = pathlib.Path(os.getenv("IMG_DIR", default="face_images"))
 FACES_IMG_DIR.mkdir(exist_ok=True)
-# For detection.
-DETECTION = HeadFace(
-    os.getenv("DETECTION_MODEL_PATH", default="weights/yolov7-hf-v1.onnx")
-)
-DETECTION_THRESH = os.getenv("DETECTION_THRESH", default=0.5)
-# For anti-spoofing.
-SPOOFING = SpoofingNet(os.getenv("SPOOFING_MODEL_PATH", default="weights/OCI2M.onnx"))
-SPOOFING_THRESH = os.getenv("SPOOFING_THRESH", default=0.6)
-# For recognition.
-RECOGNITION = GhostFaceNet(
-    os.getenv("RECOGNITION_MODEL_PATH", default="weights/ghostnetv1.onnx")
-)
-RECOGNITION_THRESH = os.getenv("RECOGNITION_THRESH", default=0.3)
-#
+
+"""
+Initialize Services
+"""
 service = FaceServiceV1(
-    DETECTION,
-    DETECTION_THRESH,
-    SPOOFING,
-    SPOOFING_THRESH,
-    RECOGNITION,
-    RECOGNITION_THRESH,
-    FACES,
+    detection=DETECTION,
+    detection_thresh=DETECTION_THRESH,
+    spoofing=SPOOFING,
+    spoofing_thresh=SPOOFING_THRESH,
+    recognition=RECOGNITION,
+    recognition_thresh=RECOGNITION_THRESH,
+    facedb=FACES,
 )
 
-
-#
+"""
+Router
+"""
 router = APIRouter(prefix="/v1")
-
-
-class FaceRequest(BaseModel):
-    base64images: list[str] = None
 
 
 @router.get("/ids")
@@ -71,7 +67,7 @@ async def create_id(id: str):
 async def register(id: str, request: FaceRequest):
     images = [base64.b64decode(x) for x in request.base64images]
     images = [Image.open(BytesIO(x)) for x in images]
-    images = service.register(id, images, FACES_IMG_DIR)
+    images = service.register_face(id, images, FACES_IMG_DIR)
     images = [f"/imgs/{id}/{x}.jpg" for x in images]
     return images
 
@@ -92,4 +88,4 @@ async def get_face_image(id: str):
 async def check_face_images(id: str, request: FaceRequest):
     images = [base64.b64decode(x) for x in request.base64images]
     images = [Image.open(BytesIO(x)) for x in images]
-    return service.check(id, images, RECOGNITION_THRESH)
+    return service.check_face(id, images, RECOGNITION_THRESH)
