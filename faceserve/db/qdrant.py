@@ -54,7 +54,7 @@ class QdrantFaceDatabase(InterfaceDatabase):
     ):
         '''Insert list of faces of a person to collection'''
         self._client.upsert(
-            collection_name=collection_name,
+            collection_name=self.collection_name,
             points=[
                 models.PointStruct(
                     id=hash_id, 
@@ -91,7 +91,7 @@ class QdrantFaceDatabase(InterfaceDatabase):
             ),
         )
 
-    def insert_face(self, face_id, face_emb, person_id, group_id):    
+    def insert_face(self, face_emb, face_id, person_id, group_id):    
         '''Insert a face of a person to collection'''
         self._client.upsert(
             collection_name=self.collection_name,
