@@ -4,8 +4,7 @@ import numpy as np
 import onnxruntime as ort
 import os
 
-from faceserve.utils import face
-
+from faceserve.utils import face, crop_image
 from .interface import InterfaceModel
 
 sess_options = ort.SessionOptions()
@@ -19,7 +18,6 @@ class GhostFaceNet(InterfaceModel):
         self.model = self.load_model(model_path)
         self.input_name = self.model.get_inputs()[0].name
         self.output_name = self.model.get_outputs()[0].name
-
         _, h, w, _ = self.model.get_inputs()[0].shape
         self.model_input_size = (w, h)
 
@@ -35,25 +33,16 @@ class GhostFaceNet(InterfaceModel):
 
     def preprocess(self, image, xyxys, kpts):
         crops = []
-        h, w = image.shape[:2]
         # dets are of different sizes so batch preprocessing is not possible
         for box, kpt in zip(xyxys, kpts):
-            x1, y1, x2, y2 = box
-            # Limit the face to the image
-            x1 = int(max(0, x1))
-            y1 = int(max(0, y1))
-            x2 = int(min(w, x2))
-            y2 = int(min(h, y2))
-
-            box = [x1, y1, x2, y2]
-            crop = image[y1:y2, x1:x2]
+            x1, y1, _, _ = box
+            # Crop face
+            crop = crop_image(image, box)
             # Align face
-            # Scale the keypoints to the face size
-            kpt[::3] = kpt[::3] - x1
+            kpt[::3] = kpt[::3] - x1 # Scale the keypoints to the face size
             kpt[1::3] = kpt[1::3] - y1
-            
             crop = face.align_5_points(crop, kpt)
-            
+
             crop = cv2.resize(crop, self.model_input_size)
             crop = (crop - 127.5) * 0.0078125
             # crop = crop.transpose(2, 0, 1)
@@ -62,20 +51,24 @@ class GhostFaceNet(InterfaceModel):
         crops = np.concatenate(crops, axis=0)
         return crops
 
-    def forward(self, images):
-        embeddings = self.model.run(
-            [self.output_name], {self.input_name: images.astype("float32")}
+    def inference(self, image, norm:bool=False):
+        if isinstance(image, list):
+            image = np.array(image)
+            
+        assert image.shape[1] == 112, f'img.shape(1) == 112. You have shape {image.shape[1]}'
+        assert image.shape[2] == 112, f'img.shape(2) == 112. You have shape {image.shape[2]}'
+            
+        result = self.model.run(
+            [self.output_name], {self.input_name: image.astype("float32")}
         )[0]
-        return embeddings
-
-    def get_features(self, image, xyxys, kpts):
-        if len(xyxys) == 0:
-            return np.array([])
         
-        crops = self.preprocess(image, xyxys, kpts)
-        embeddings = self.forward(crops)
-        embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
-        return embeddings
+        if norm:
+            result = result / np.linalg.norm(result, axis=1, keepdims=True)
+            
+        return result
     
-    def postprocess(self, image: Any, **kwargs) -> Any:
-        ...
+    def postprocess(self, image, **kwargs) -> Any:
+        raise NotImplementedError
+
+    def batch_inference(self, images, **kwargs) -> Any:
+        raise NotImplementedError
