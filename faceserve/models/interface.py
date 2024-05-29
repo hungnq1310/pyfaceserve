@@ -20,9 +20,9 @@ class InterfaceModel(BaseModel):
         ...
 
     @abstractmethod
-    def get_features(self, image: Any, **kwargs) -> Any:
+    def inference(self, image: Any, **kwargs) -> Any:
         ...
 
     @abstractmethod
-    def forward(self, images: List[Any], **kwargs) -> List[Any]:
+    def batch_inference(self, images: List[Any], **kwargs) -> List[Any]:
         ...
