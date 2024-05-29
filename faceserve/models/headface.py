@@ -1,35 +1,46 @@
 import numpy as np
 import cv2
+import onnxruntime as ort
 
 from .interface import InterfaceModel
+
+sess_options = ort.SessionOptions()
+sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 
 class HeadFace(InterfaceModel):
     '''HeadFace'''
 
     def __init__(self, model_path):
-        self.load_model(model_path)
-        
-    def load_model(self, path):
-        model_type = path.split(".")[-1]
-        
-        if model_type == "onnx":
-            import onnxruntime as ort
+        self._model = self.load_model(model_path)
+        self.inp_name = self._model.get_inputs()[0].name
+        self.opt1_name = self._model.get_outputs()[0].name
+        self.opt2_name = self._model.get_outputs()[1].name
+        _, _, h, w = self._model.get_inputs()[0].shape
+        self.model_inpsize = (w, h)
 
-            self.model = ort.InferenceSession(
-                path,
-                providers=[
-                    "CUDAExecutionProvider",
-                    "CPUExecutionProvider",
-                ],
-            )
-        elif model_type == 'pt':
-            import torch
-
-            self.model = torch.load(path)
-        else:
-            raise ValueError("Model type not supported")
+    def load_model(self, path):        
+        return ort.InferenceSession(
+            path,
+            providers=[
+                "CUDAExecutionProvider",
+                "CPUExecutionProvider",
+            ],
+        )
         
     def preprocess(self, image, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleup=True, stride=32):
+        """ Preprocessing function with reshape and normalize input
+
+        Args:
+            im (np.array, optional): input image
+            new_shape (tuple, optional): new shape to resize. Defaults to (640, 640).
+            color (tuple, optional): _description_. Defaults to (114, 114, 114).
+            scaleup (bool, optional): resize small to large input size. Defaults to True.
+
+        Returns:
+            im: image after normalize and resize
+            r: scale ratio between original and new shape 
+            dw, dh: padding follow by yolo processing
+        """
         # Resize and pad image while meeting stride-multiple constraints
         shape = image.shape[:2]  # current shape [height, width]
         
@@ -65,46 +76,77 @@ class HeadFace(InterfaceModel):
         
         return image, r, (dw, dh)
     
-    def post_process(self, image, ratio, dwdh, conf_thre = 0.7, conf_kpts=0.9, get_layer=None):
-        """_summary_
+    def postprocess(self, prediction, ratio, dwdh, det_thres = 0.7, get_layer=None):
+        """Processing output model match output format
 
         Args:
-            image (_type_): _description_
-            conf_thre (float, optional): _description_. Defaults to 0.7.
-            conf_kpts (float, optional): _description_. Defaults to 0.9.
-            get_layer (str, optional): _description_. Defaults to 'face'.
+            prediction (array): predict output model 
+                base_opt: batch_index, xmin, ymin, xmax, ymax, bbox_label, bbox_score
+                - prediction w/o keypoint
+                    prediction[batch, 7]: base_opt
+                - prediction with keypoint
+                    prediction[batch, 7 + kpts]: base_opt,
+                                            x_keypoint1, y_keypoint1, keypoint1_score,
+                                            x_keypoint2, y_keypoint2, keypoint2_score,
+                                            ...
+                                            x_keypoint, y_keypoint2, keypoint2_score,
+            ratio (float, optional): 
+            dwdh (float, optional): 
+            det_thres (float, optional): _description_. Defaults to 0.7.
+            get_layer (str, optional): get detection output layer if the ouput has:
+                                        3 items [head, face, body]
+                                        2 items [face, head].
 
         Returns:
-            _type_: [bbox, score, class_name]
+            [bbox, score, class_name, keypoints]
         """
+        assert get_layer is not None, 'get_layer is None'
         
-        if isinstance(image, list):
-            image = np.array(image)
+        if isinstance(prediction, list):
+            prediction = np.array(prediction)
             
+        pred = prediction[prediction[:, 6] > det_thres] # get sample higher than threshold
+        
         padding = dwdh*2
-        det_bboxes, det_scores, det_labels  = image[:, 1:5], image[:, 6], image[:, 5]
-        if get_layer == 'face':
-            kpts = image[:, 7:]
-            
-        det_bboxes = (det_bboxes[:, 0::] - np.array(padding)) /ratio
-        if get_layer == 'face':
+        det_bboxes, det_scores, det_labels  = pred[:,1:5], pred[:,6], pred[:, 5]
+        kpts = pred[:, 7:] if pred.shape[1] > 6 else None
+        det_bboxes = (det_bboxes[:, 0::] - np.array(padding)) / ratio
+        
+        if kpts is not None:
             kpts[:,0::3] = (kpts[:,0::3] - np.array(padding[0])) / ratio
             kpts[:,1::3] = (kpts[:,1::3]- np.array(padding[1])) / ratio
 
         return det_bboxes, det_scores, det_labels, kpts
     
-    def detect(self, img, test_size=(640, 640), conf_det=0.6, nmsthre=0.45, get_layer=None):
-        tensor_img, ratio, dwdh = self.preprocess(img, test_size, auto=False)
+    def inference(self, image, test_size=(640, 640), det_thres=0.6, get_layer='face') -> tuple:
+        """ Execute the main process
 
-        # inference head, face
-        outputs = self.model.run([], {self.model.get_inputs()[0].name: tensor_img})
+        Args:
+            img (np.array): _description_
+            test_size (tuple, optional): _description_. Defaults to (640, 640).
+            det_thres (float, optional): _description_. Defaults to 0.6.
+            get_layer (_type_, optional): _description_. Defaults to None.
+
+        Returns:
+            bbox: xyxy object
+            score: bbox score of object detection
+            label: both face = head = 0 (the same class name)
+            kpts: if get_layer == 'face' return keypoints else None
+        """
+        # preprocess input
+        tensor_img, ratio, dwdh = self.preprocess(image, test_size)
+        
+        # model prediction
+        outputs = self._model.run([self.opt1_name, self.opt2_name], {self.inp_name: tensor_img})
+
+        assert len(outputs) == 2, f'{self.__repr_name__} only support head and face detection'
+        
         pred = outputs[1] if get_layer == 'face' else outputs[0]
-        bboxes, scores, labels, kpts = self.post_process(pred, ratio, dwdh, get_layer=get_layer)
-        #
+        
+        # postprocess output
+        bboxes, scores, labels, kpts = self.postprocess(pred, ratio, dwdh, det_thres, get_layer)
+        
         return bboxes, scores, labels, kpts
     
-    def get_features(self, image, **kwargs):
-        ...
-
-    def forward(self, images, **kwargs):
-        ...
+    def batch_inference(self, imgs):
+        raise NotImplementedError(f'{self.__repr_name__} does not support batch inference')
