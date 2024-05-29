@@ -1,6 +1,4 @@
-import cv2
 from PIL import Image
-import numpy as np
 import base64
 from io import BytesIO
 
@@ -15,13 +13,13 @@ def crop_image(image, bbox):
     return image[y1:y2, x1:x2]
 
 
-def to_base64(image: Image) -> str:
+def to_base64(image: Image.Image) -> str:
     buffered = BytesIO()
     image.save(buffered, format="JPEG")
     img_str = base64.b64encode(buffered.getvalue())
-    return img_str
+    return str(img_str)
 
 
-def from_base64(base64str: str) -> Image:
+def from_base64(base64str: str) -> Image.Image:
     im = Image.open(BytesIO(base64.b64decode(base64str)))
     return im
