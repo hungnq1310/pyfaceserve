@@ -16,7 +16,7 @@ class InterfaceModel(BaseModel):
         ...
 
     @abstractmethod
-    def postprocess(self, image: Any, **kwargs) -> Any:
+    def postprocess(self, prediction: Any, **kwargs) -> Any:
         ...
 
     @abstractmethod
