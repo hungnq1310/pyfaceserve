@@ -74,7 +74,7 @@ async def register(id: str, request: FaceRequest):
 
 @router.get("/person-faces/{id}")
 async def get_face_image(id: str):
-    if FACES.list_face(id)[0] is not None:
+    if not FACES.list_face(id)[0]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=f"Person ID {id} is not founded"
         )
