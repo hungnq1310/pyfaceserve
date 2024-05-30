@@ -17,6 +17,10 @@ class QdrantFaceDatabase(InterfaceDatabase):
     ) -> None:
         self._client = self.connect_client(host, port, url, api_key)
         self.collection_name = collection_name
+        if  not self._client.collection_exists(collection_name):
+            self.create_colection(
+                dimension=512, distance='cosine'
+            )
 
     def connect_client(self, host, port, url, api_key):
         if url is not None and api_key is not None:
