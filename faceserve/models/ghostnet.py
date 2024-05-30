@@ -51,17 +51,19 @@ class GhostFaceNet(InterfaceModel):
         crops = np.concatenate(crops, axis=0)
         return crops
 
-    def inference(self, image, norm:bool=False):
+    def inference(self, image, xyxys, kpts, norm:bool=False):
         if isinstance(image, list):
             image = np.array(image)
-            
-        assert image.shape[1] == 112, f'img.shape(1) == 112. You have shape {image.shape[1]}'
-        assert image.shape[2] == 112, f'img.shape(2) == 112. You have shape {image.shape[2]}'
-            
+        # preprocess
+        crops = self.preprocess(image, xyxys, kpts)
+        # check shape
+        assert crops.shape[1] == 112, f'img.shape(1) == 112. You have shape {crops.shape[1]}'
+        assert crops.shape[2] == 112, f'img.shape(2) == 112. You have shape {crops.shape[2]}'
+        # Inference
         result = self.model.run(
-            [self.output_name], {self.input_name: image.astype("float32")}
+            [self.output_name], {self.input_name: crops.astype("float32")}
         )[0]
-        
+        # Normalize
         if norm:
             result = result / np.linalg.norm(result, axis=1, keepdims=True)
             
