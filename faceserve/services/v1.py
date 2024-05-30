@@ -44,14 +44,14 @@ class FaceServiceV1(InterfaceService):
             Tuple[Any, Any]: face bounding boxes, face embeddings
         """
         image = np.array(image)  # type: ignore
-        boxes, _, _, _ = self.detection.inference(
+        boxes, _, _, kpts = self.detection.inference(
             image, get_layer="face", det_thres=self.detection_thresh
         )
         if len(boxes) == 1:
-            spoof = self.spoofing.inference(image)
+            spoof = self.spoofing.inference(image, boxes, kpts) # type: ignore
             spoof = softmax(spoof)[:, 0]
             if spoof[0] > self.spoofing_thresh:  # check fake face
-                res = self.recognition.inference(image)
+                res = self.recognition.inference(image, boxes, kpts) # type: ignore
                 return boxes[0], res[0]
             else:
                 return boxes[0], None
