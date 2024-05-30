@@ -17,7 +17,7 @@ class SpoofingNet(InterfaceModel):
         self.model = self.load_model(model_path)
         self.input_name = self.model.get_inputs()[0].name
         self.output_name = self.model.get_outputs()[0].name
-        _, h, w, _ = self.model.get_inputs()[0].shape
+        _, _, w, h = self.model.get_inputs()[0].shape
         self.model_input_size = (w, h)
 
     def load_model(self, path: str) -> ort.InferenceSession:
@@ -50,12 +50,14 @@ class SpoofingNet(InterfaceModel):
         crops = np.concatenate(crops, axis=0)
         return crops
 
-    def inference(self, image):
+    def inference(self, image, xyxys, kpts):
         if isinstance(image, list):
             image = np.array(image)
-            
+        # Add preprocessing
+        crops = self.preprocess(image, xyxys, kpts)
+        # Create output
         result = self.model.run(
-            [self.output_name], {self.input_name: image.astype("float32")}
+            [self.output_name], {self.input_name: crops.astype("float32")}
         )[0]
         
         return result
