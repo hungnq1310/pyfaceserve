@@ -76,7 +76,8 @@ class QdrantFaceDatabase(InterfaceDatabase):
         '''List all faces of a given person in collection'''
         return self._client.scroll(
             collection_name=self.collection_name,
-            limit=1000
+            limit=1000,
+            with_payload=True,
         )
 
     def delete_person(self, person_id):
