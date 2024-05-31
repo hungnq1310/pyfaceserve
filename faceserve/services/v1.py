@@ -126,7 +126,7 @@ class FaceServiceV1(InterfaceService):
         """
         res, imgs = self.validate_face(id, images)
         #
-        checked = [self.facedb.check_face(id, x, thresh) for x in res] # type: ignore
+        checked = [self.facedb.check_face(x, thresh) for x in res] # type: ignore
         checked = [x for x in checked if x is True]
         #
         if len(checked) >= len(imgs) / 2:
