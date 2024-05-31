@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import onnxruntime as ort
+from pydantic import Field
 
 from .interface import InterfaceModel
 
@@ -9,8 +10,13 @@ sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_AL
 
 class HeadFace(InterfaceModel):
     '''HeadFace'''
+    inp_name: str = Field(default='input_0')
+    opt1_name: str = Field(default='output_0')
+    opt2_name: str = Field(default='output_1')
+    model_inpsize: tuple = Field(default=(640, 640))
 
     def __init__(self, model_path):
+        super().__init__()
         self._model = self.load_model(model_path)
         self.inp_name = self._model.get_inputs()[0].name
         self.opt1_name = self._model.get_outputs()[0].name
@@ -118,7 +124,7 @@ class HeadFace(InterfaceModel):
 
         return det_bboxes, det_scores, det_labels, kpts
     
-    def inference(self, image, test_size=(640, 640), det_thres=0.6, get_layer='face') -> tuple:
+    def inference(self, image, test_size=(640, 640), det_thres=0.6, get_layer='face'):
         """ Execute the main process
 
         Args:
