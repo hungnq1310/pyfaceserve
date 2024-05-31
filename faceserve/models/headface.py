@@ -33,7 +33,7 @@ class HeadFace(InterfaceModel):
             ],
         )
         
-    def preprocess(self, image, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleup=True, stride=32):
+    def preprocess(self, image, new_shape=(640, 640), color=(114, 114, 114), scaleup=True):
         """ Preprocessing function with reshape and normalize input
 
         Args:
@@ -61,9 +61,6 @@ class HeadFace(InterfaceModel):
         # Compute padding
         new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))
         dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]  # wh padding
-
-        if auto:  # minimum rectangle
-            dw, dh = np.mod(dw, stride), np.mod(dh, stride)  # wh padding
 
         dw /= 2  # divide padding into 2 sides
         dh /= 2
