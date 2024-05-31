@@ -21,7 +21,7 @@ RECOGNITION = GhostFaceNet(os.getenv("RECOGNITION_MODEL_PATH", default="weights/
 # Threshold
 DETECTION_THRESH = os.getenv("DETECTION_THRESH", default=0.5)
 SPOOFING_THRESH = os.getenv("SPOOFING_THRESH", default=0.6)
-RECOGNITION_THRESH = os.getenv("RECOGNITION_THRESH", default=0.3)
+RECOGNITION_THRESH = os.getenv("RECOGNITION_THRESH", default=0.1)
 # Face db storage.
 FACES = QdrantFaceDatabase(
     collection_name="faces_collection",
@@ -47,12 +47,6 @@ Router
 """
 router = APIRouter(prefix="/v1")
 
-
-@router.get("/ids")
-async def get_id():
-    return json.dumps(FACES.list_person())
-
-
 # @router.post("/id")
 # async def create_id(id: str, files: List[UploadFile]):
 #     try:
@@ -72,7 +66,13 @@ async def register(id: str, request: FaceRequest):
     return images
 
 
-@router.get("/person-faces/{id}")
+@router.get("/faces")
+async def get_faces():
+    dict_record = [x.__dict__ for x in FACES.list_person()[0] if x is not None]
+    return json.dumps(dict_record)
+
+
+@router.get("/faces/person")
 async def get_face_image(id: str):
     if not FACES.list_face(id)[0]:
         raise HTTPException(
