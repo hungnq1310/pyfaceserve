@@ -1,4 +1,5 @@
 from typing import Any
+from pydantic import Field
 import cv2
 import numpy as np
 import onnxruntime as ort
@@ -13,12 +14,16 @@ sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_AL
 
 class GhostFaceNet(InterfaceModel):
     '''GhostFaceNet'''
+    input_name: str = Field(default="input")
+    output_name: str = Field(default="output")
+    model_input_size: tuple = Field(default=(256, 256))
 
     def __init__(self, model_path) -> None:
-        self.model = self.load_model(model_path)
-        self.input_name = self.model.get_inputs()[0].name
-        self.output_name = self.model.get_outputs()[0].name
-        _, h, w, _ = self.model.get_inputs()[0].shape
+        super().__init__()
+        self._model = self.load_model(model_path)
+        self.input_name = self._model.get_inputs()[0].name
+        self.output_name = self._model.get_outputs()[0].name
+        _, h, w, _ = self._model.get_inputs()[0].shape
         self.model_input_size = (w, h)
 
     def load_model(self, path: str | bytes | os.PathLike) -> ort.InferenceSession:
@@ -32,6 +37,16 @@ class GhostFaceNet(InterfaceModel):
         )
 
     def preprocess(self, image, xyxys, kpts):
+        """ Preprocessing function with crops and align keypoints
+
+        Args:
+            image (np.array, optional): input image
+            xyxys (tuple, optional): bbox prediction from headface model
+            kpts (tuple, optional): keypoint prediction from headface model
+
+        Returns:
+            crops (np.array): list of corps (num_crops, 3, 112, 112)
+        """
         crops = []
         # dets are of different sizes so batch preprocessing is not possible
         for box, kpt in zip(xyxys, kpts):
@@ -52,6 +67,16 @@ class GhostFaceNet(InterfaceModel):
         return crops
 
     def inference(self, image, xyxys, kpts, norm:bool=False):
+        """ Get the embedding of the face
+
+        Args:
+            image (np.array): input image
+            xyxys (tuple, optional): bbox prediction from headface model
+            kpts (tuple, optional): keypoint prediction from headface model
+
+        Returns:
+            result ([batch, vector]): output of model - size: (batch, emb_size)
+        """
         if isinstance(image, list):
             image = np.array(image)
         # preprocess
@@ -60,7 +85,7 @@ class GhostFaceNet(InterfaceModel):
         assert crops.shape[1] == 112, f'img.shape(1) == 112. You have shape {crops.shape[1]}'
         assert crops.shape[2] == 112, f'img.shape(2) == 112. You have shape {crops.shape[2]}'
         # Inference
-        result = self.model.run(
+        result = self._model.run(
             [self.output_name], {self.input_name: crops.astype("float32")}
         )[0]
         # Normalize
