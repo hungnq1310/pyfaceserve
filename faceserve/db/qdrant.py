@@ -115,13 +115,9 @@ class QdrantFaceDatabase(InterfaceDatabase):
         return self._client.scroll(
             collection_name=self.collection_name,
             scroll_filter=models.Filter(
-                must_not=[
-                    models.Filter(
-                        must=[
-                            models.FieldCondition(
-                                key="person_id", match=models.MatchValue(value=f"{person_id}")
-                            ),
-                        ],
+                must=[
+                    models.FieldCondition(
+                        key="person_id", match=models.MatchValue(value=f"{person_id}")
                     ),
                 ],
             ),
