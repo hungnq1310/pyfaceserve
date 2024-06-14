@@ -71,12 +71,12 @@ class QdrantFaceDatabase(InterfaceDatabase):
             ],
         )
 
-    def delete_face(self, face_id: str | None, person_id: str | None, group_id: str | None):
+    def delete_face(self, face_id: str|None, person_id: str|None, group_id: str|None):
         '''Delete a face of a given person's id or group's id in collection'''
         assert person_id is not None and group_id is not None, "person_id and group_id cannot be None at the same time"
         if group_id is not None:
             self._client.delete(
-                collection_name="{collection_name}",
+                collection_name=self.collection_name,
                 points_selector=models.FilterSelector(filter=models.Filter(
                     must=[
                         models.FieldCondition(
@@ -88,7 +88,7 @@ class QdrantFaceDatabase(InterfaceDatabase):
             )
         elif person_id is not None:
             self._client.delete(
-                collection_name="{collection_name}",
+                collection_name=self.collection_name,
                 points_selector=models.FilterSelector(filter=models.Filter(
                     must=[
                         models.FieldCondition(
@@ -106,7 +106,7 @@ class QdrantFaceDatabase(InterfaceDatabase):
                 )
             )
 
-    def list_face(self, person_id: int | None, group_id: str | None):
+    def list_faces(self, person_id: str|None, group_id: str|None):
         '''List all faces of a given person's id or group's id in collection'''
         if person_id is not None and group_id is not None:
             return self._client.scroll(
@@ -150,7 +150,6 @@ class QdrantFaceDatabase(InterfaceDatabase):
             with_payload=True,
         )
 
-    #TODO: consistency with interface class
     def check_face(self, face_emb, thresh):
         res = self._client.search(
             collection_name=self.collection_name, query_vector=face_emb, limit=1
