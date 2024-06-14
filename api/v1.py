@@ -68,12 +68,21 @@ async def get_face_image(id: str|None = None, group_id: str|None = None):
 
 
 @router.delete("/delete")
-async def delete_face(face_id: str|None = None, person_id: str|None = None, group_id: str|None = None):
-    return FACES.delete_face(face_id=face_id, person_id=person_id, group_id=group_id)
+async def delete_face(face_id: str|None = None, id: str|None = None, group_id: str|None = None):
+    return FACES.delete_face(
+        face_id=face_id, 
+        person_id=id, 
+        group_id=group_id
+    )
 
 
 @router.post("/check")
-async def check_face_images(request: FaceRequest, person_id: str|None = None, group_id: str|None = None):
+async def check_face_images(request: FaceRequest, id: str|None = None, group_id: str|None = None):
     images = [base64.b64decode(x) for x in request.base64images]
     images = [Image.open(BytesIO(x)) for x in images]
-    return service.check_face(images, RECOGNITION_THRESH, person_id=person_id, group_id=group_id)
+    return service.check_face(
+        images=images, 
+        thresh=RECOGNITION_THRESH, 
+        person_id=id, 
+        group_id=group_id
+    )
