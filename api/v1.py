@@ -45,15 +45,6 @@ Router
 router = APIRouter(prefix="/v1")
 router.mount("/imgs", StaticFiles(directory=FACES_IMG_DIR), name="imgs")
 
-# @router.post("/id")
-# async def create_id(id: str, files: List[UploadFile]):
-#     try:
-#         FACES.insert_person(person_id=id)
-#     except:
-#         raise HTTPException(
-#             status_code=status.HTTP_406_NOT_ACCEPTABLE, detail="Cannot create ID"
-#         )
-
 
 @router.post("/register")
 async def register(id: str, request: FaceRequest, groups_id: str|None = None):
@@ -76,7 +67,7 @@ async def get_face_image(id: str|None = None, group_id: str|None = None):
     return res
 
 
-@router.delete("/faces")
+@router.delete("/delete")
 async def delete_face(face_id: str|None = None, person_id: str|None = None, group_id: str|None = None):
     return FACES.delete_face(face_id=face_id, person_id=person_id, group_id=group_id)
 
