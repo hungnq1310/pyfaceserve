@@ -11,23 +11,11 @@ from faceserve.models.interface import InterfaceModel
 from .interface import InterfaceService
 
 
-def softmax(z):
-    assert len(z.shape) == 2
-    s = np.max(z, axis=1)
-    s = s[:, np.newaxis] # necessary step to do broadcasting
-    e_x = np.exp(z - s)
-    div = np.sum(e_x, axis=1)
-    div = div[:, np.newaxis] # dito
-    return e_x / div
-
-
 class FaceServiceV1(InterfaceService):
     def __init__(
         self,
         detection: InterfaceModel,
         detection_thresh: float,
-        spoofing: InterfaceModel,
-        spoofing_thresh: float,
         recognition: InterfaceModel,
         recognition_thresh: float,
         facedb: InterfaceDatabase,
@@ -35,8 +23,6 @@ class FaceServiceV1(InterfaceService):
         self.facedb = facedb
         self.detection = detection
         self.detection_thresh = detection_thresh
-        self.spoofing = spoofing
-        self.spoofing_thresh = spoofing_thresh
         self.recognition = recognition
         self.recognition_thresh = recognition_thresh
 
@@ -54,16 +40,11 @@ class FaceServiceV1(InterfaceService):
             image, get_layer="face", det_thres=self.detection_thresh
         )
         if len(boxes) == 1:
-            spoof = self.spoofing.inference(image, boxes, kpts) # type: ignore
-            spoof = softmax(spoof)[:, 0]
-            if spoof[0] > self.spoofing_thresh:  # check fake face
-                res = self.recognition.inference(image, boxes, kpts) # type: ignore
-                return boxes[0], res[0]
-            else:
-                return boxes[0], None
+            res = self.recognition.inference(image, boxes, kpts) # type: ignore
+            return boxes[0], res[0]
         return None, None
 
-    def validate_face(self, id: str, images: List[Image.Image]) -> Tuple[List[Any], List[Image.Image]]:
+    def validate_face(self, images: List[Image.Image], person_id: str | None, group_id: str | None) -> Tuple[List[Any], List[Image.Image]]:
         """Validate face images
 
         Args:
@@ -73,8 +54,9 @@ class FaceServiceV1(InterfaceService):
         Returns:
             Tuple[List[Any], List[Image.Image]]: list of face embeddings, list of face images
         """
-        if not self.facedb.list_face(id):
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "ID not found.")
+        if person_id is not None or group_id is not None:
+            if not self.facedb.list_faces(person_id=person_id, group_id=group_id):
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "ID not found.")
         # get temp result
         res, imgs, temp = [], [], [self.get_face_emb(x) for x in images]
         for i in range(len(temp)):
@@ -91,7 +73,7 @@ class FaceServiceV1(InterfaceService):
             "Your face images is not valid, please try again.",
         )
 
-    def register_face(self, id: str, images: List[Image.Image], face_folder: Path) -> List[str]:
+    def register_face(self, images: List[Image.Image], id: str, group_id: str | None, face_folder: Path) -> List[str]:
         """
         Register face images
         
@@ -103,23 +85,29 @@ class FaceServiceV1(InterfaceService):
         Returns:
             List[str]: list of face hashes
         """
-        res, imgs = self.validate_face(id, images)
-        #
-        folder = face_folder.joinpath(f"{id}")
+        # for test, only id is required when registing
+        if group_id is None:
+            group_id = "default"
+        # validate face
+        embeds, imgs = self.validate_face(images=images, person_id=id, group_id=group_id)
+        # create folder
+        folder = face_folder.joinpath(f"{group_id}", f"{id}")
         folder.mkdir(exist_ok=True)
-        #
-        response = []
-        for i in range(len(res)):
-            emb, img = res[i], imgs[i]
-            hash = hashlib.md5(img.tobytes()).hexdigest()
-            #
-            self.facedb.insert_face(emb, hash, id, "default") # type: ignore
-            #
-            img.save(folder.joinpath(f"{hash}.jpg"))
-            response.append(hash)
-        return response
+        # get hashes
+        hashes = [hashlib.md5(img.tobytes()).hexdigest() for img in imgs]
+        # assert and insert
+        assert len(embeds) == len(hashes), f"Embedding and hash length mismatch, {len(embeds)} != {len(hashes)}"
+        self.facedb.insert_faces(
+            face_embs=zip(embeds, hashes), 
+            person_id=id, group_id=group_id
+        ) 
+        # save images
+        for i in range(len(imgs)):
+            imgs[i].save(folder.joinpath(f"{hashes[i]}.jpg"))
+        return hashes
 
-    def check_face(self, id: str, images: List[Image.Image], thresh: float) -> dict:
+
+    def check_face(self, images: List[Image.Image], thresh: float) -> dict:
         """Check face images
 
         Args:
@@ -130,7 +118,7 @@ class FaceServiceV1(InterfaceService):
         Returns:
             dict: status
         """
-        res, imgs = self.validate_face(id, images)
+        res, imgs = self.validate_face(images=images)
         #
         checked = [self.facedb.check_face(x, thresh) for x in res] # type: ignore
         checked = [x for x in checked if x is True]
