@@ -44,7 +44,7 @@ class FaceServiceV1(InterfaceService):
             return boxes[0], res[0]
         return None, None
 
-    def validate_face(self, images: List[Image.Image], person_id: str | None, group_id: str | None) -> Tuple[List[Any], List[Image.Image]]:
+    def validate_face(self, images: List[Image.Image], person_id: str|None, group_id: str|None) -> Tuple[List[Any], List[Image.Image]]:
         """Validate face images
 
         Args:
@@ -73,7 +73,7 @@ class FaceServiceV1(InterfaceService):
             "Your face images is not valid, please try again.",
         )
 
-    def register_face(self, images: List[Image.Image], id: str, group_id: str | None, face_folder: Path) -> List[str]:
+    def register_face(self, images: List[Image.Image], id: str, group_id: str|None, face_folder: Path) -> List[str]:
         """
         Register face images
         
@@ -91,14 +91,16 @@ class FaceServiceV1(InterfaceService):
         # validate face
         embeds, imgs = self.validate_face(images=images, person_id=id, group_id=group_id)
         # create folder
-        folder = face_folder.joinpath(f"{group_id}", f"{id}")
+        folder = face_folder.joinpath(f"{group_id}")
+        folder.mkdir(exist_ok=True)
+        folder = face_folder.joinpath(f"{id}")
         folder.mkdir(exist_ok=True)
         # get hashes
         hashes = [hashlib.md5(img.tobytes()).hexdigest() for img in imgs]
         # assert and insert
         assert len(embeds) == len(hashes), f"Embedding and hash length mismatch, {len(embeds)} != {len(hashes)}"
         self.facedb.insert_faces(
-            face_embs=zip(embeds, hashes), 
+            face_embs=zip(hashes, embeds), 
             person_id=id, group_id=group_id
         ) 
         # save images
@@ -107,7 +109,7 @@ class FaceServiceV1(InterfaceService):
         return hashes
 
 
-    def check_face(self, images: List[Image.Image], thresh: float) -> dict:
+    def check_face(self, images: List[Image.Image], thresh: float, person_id: str|None, group_id: str|None) -> dict:
         """Check face images
 
         Args:
@@ -118,7 +120,7 @@ class FaceServiceV1(InterfaceService):
         Returns:
             dict: status
         """
-        res, imgs = self.validate_face(images=images)
+        res, imgs = self.validate_face(images=images, person_id=person_id, group_id=group_id)
         #
         checked = [self.facedb.check_face(x, thresh) for x in res] # type: ignore
         checked = [x for x in checked if x is True]
