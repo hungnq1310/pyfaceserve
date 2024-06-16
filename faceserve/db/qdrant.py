@@ -149,6 +149,13 @@ class QdrantFaceDatabase(InterfaceDatabase):
             limit=1000,
             with_payload=True,
         )
+    
+    def get_face_by_id(self, face_id: str):
+        '''Get a face of a given face id in collection'''
+        return self._client.retrieve(
+            collection_name=self.collection_name,
+            ids=[face_id],
+        )
 
     def check_face(self, face_emb, thresh):
         res = self._client.search(
