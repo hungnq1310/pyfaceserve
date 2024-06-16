@@ -26,7 +26,7 @@ class FaceServiceV1(InterfaceService):
         self.recognition = recognition
         self.recognition_thresh = recognition_thresh
 
-    def get_face_emb(self, image: Image.Image) -> Tuple[Any, Any]:
+    def get_face_emb(self, image: Image.Image) -> Tuple[list, list]:
         """Get face embedding from face image
         
         Args:
@@ -42,7 +42,7 @@ class FaceServiceV1(InterfaceService):
         if len(boxes) == 1:
             res = self.recognition.inference(image, boxes, kpts) # type: ignore
             return boxes[0], res[0]
-        return None, None
+        return [], []
 
     def validate_face(self, images: List[Image.Image], person_id: str|None, group_id: str|None) -> Tuple[List[Any], List[Image.Image]]:
         """Validate face images
@@ -54,14 +54,11 @@ class FaceServiceV1(InterfaceService):
         Returns:
             Tuple[List[Any], List[Image.Image]]: list of face embeddings, list of face images
         """
-        if person_id is not None or group_id is not None:
-            if not self.facedb.list_faces(person_id=person_id, group_id=group_id):
-                raise HTTPException(status.HTTP_404_NOT_FOUND, "ID not found.")
         # get temp result
         res, imgs, temp = [], [], [self.get_face_emb(x) for x in images]
         for i in range(len(temp)):
             _, emb = temp[i]
-            if emb is not None:
+            if len(emb) != 0:
                 res.append(emb)
                 imgs.append(images[i])
 
@@ -73,7 +70,7 @@ class FaceServiceV1(InterfaceService):
             "Your face images is not valid, please try again.",
         )
 
-    def register_face(self, images: List[Image.Image], id: str, group_id: str|None, face_folder: Path) -> List[str]:
+    def register_face(self, images: List[Image.Image], id: str, group_id: str, face_folder: Path) -> List[str]:
         """
         Register face images
         
@@ -85,22 +82,25 @@ class FaceServiceV1(InterfaceService):
         Returns:
             List[str]: list of face hashes
         """
-        # for test, only id is required when registing
-        if group_id is None:
-            group_id = "default"
         # validate face
         embeds, imgs = self.validate_face(images=images, person_id=id, group_id=group_id)
         # create folder
-        folder = face_folder.joinpath(f"{group_id}")
-        folder.mkdir(exist_ok=True)
-        folder = face_folder.joinpath(f"{id}")
-        folder.mkdir(exist_ok=True)
+        folder = face_folder.joinpath(f"{group_id}").joinpath(f"{id}")
+        folder.mkdir(parents=True, exist_ok=True)
         # get hashes
         hashes = [hashlib.md5(img.tobytes()).hexdigest() for img in imgs]
         # assert and insert
         assert len(embeds) == len(hashes), f"Embedding and hash length mismatch, {len(embeds)} != {len(hashes)}"
+        # check if face's image already exists
+        filter_hashes, filter_emb = [], []
+        for hash, emb in zip(hashes, embeds):
+            if self.facedb.get_face_by_id(hash) is not None: # function only for qdrant
+                print(f"Face hash {hash} already exists, skipping...")
+            filter_hashes.append(hash)
+            filter_emb.append(emb)  
+        # insert
         self.facedb.insert_faces(
-            face_embs=zip(hashes, embeds), 
+            face_embs=zip(filter_hashes, filter_emb), 
             person_id=id, group_id=group_id
         ) 
         # save images
