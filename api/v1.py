@@ -4,9 +4,10 @@ import base64
 import pathlib
 from PIL import Image
 from io import BytesIO
-from fastapi import APIRouter, HTTPException, status
-from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
 
+from fastapi import APIRouter, HTTPException, status, Request
+from fastapi.staticfiles import StaticFiles
 from faceserve.services.v1 import FaceServiceV1
 from faceserve.models import HeadFace, GhostFaceNet
 from faceserve.db.qdrant import QdrantFaceDatabase
@@ -43,29 +44,29 @@ service = FaceServiceV1(
 Router
 """
 router = APIRouter(prefix="/v1")
-router.mount("/imgs", StaticFiles(directory=FACES_IMG_DIR), name="imgs")
-
 
 @router.post("/register")
-async def register(id: str, request: FaceRequest, groups_id: str|None = None):
+async def register(id: str, request: FaceRequest, groups_id: str = "default"):
     images = [base64.b64decode(x) for x in request.base64images]
     images = [Image.open(BytesIO(x)) for x in images]
     hash_imgs = service.register_face(images=images, id=id, group_id=groups_id, face_folder=FACES_IMG_DIR)
-    return [f"/imgs/{id}/{x}.jpg" for x in hash_imgs]
+    return [f"/imgs/{groups_id}/{id}/{x}.jpg" for x in hash_imgs]
 
 
 @router.get("/faces")
 async def get_face_image(id: str|None = None, group_id: str|None = None):
     if not FACES.list_faces(person_id=id, group_id=group_id)[0]:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=f"{group_id}/{id} is not founded"
+            status_code=status.HTTP_403_FORBIDDEN, detail="No image found, database empty"
         )
-    res = ["".join(x.id.split("-")) 
-        for x in FACES.list_faces(person_id=id, group_id=group_id)[0] if x is not None
-    ]
-    res = [f"/imgs/{id}/{x}.jpg" for x in res]
-    return res
-
+    res = [x for x in FACES.list_faces(person_id=id, group_id=group_id)[0] if x is not None]
+    output = []
+    for x in res:
+        res_group = x.payload["group_id"]
+        res_person = x.payload["person_id"]
+        res_hash = "".join(x.id.split("-"))
+        output.append(f"/imgs/{res_group}/{res_person}/{res_hash}.jpg")
+    return output
 
 @router.delete("/delete")
 async def delete_face(face_id: str|None = None, id: str|None = None, group_id: str|None = None):
@@ -76,7 +77,7 @@ async def delete_face(face_id: str|None = None, id: str|None = None, group_id: s
     )
 
 
-@router.post("/check")
+@router.post("/check/face")
 async def check_face_images(request: FaceRequest, id: str|None = None, group_id: str|None = None):
     images = [base64.b64decode(x) for x in request.base64images]
     images = [Image.open(BytesIO(x)) for x in images]
