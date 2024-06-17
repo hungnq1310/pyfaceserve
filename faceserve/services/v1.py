@@ -122,12 +122,12 @@ class FaceServiceV1(InterfaceService):
         """
         res, imgs = self.validate_face(images=images, person_id=person_id, group_id=group_id)
         #
-        checked = [self.facedb.check_face(x, thresh) for x in res] # type: ignore
-        checked = [x for x in checked if x is True]
+        check_res = [self.facedb.check_face(x, thresh) for x in res] # type: ignore
+        verify_face = [True for x in check_res if len(x) == 1 else False]
         #
-        if len(checked) >= len(imgs) / 2:
+        if len(verify_face) >= len(imgs) / 2:
             return {"status": "ok"}
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            f"Face checking fail (only {len(checked)}/{len(images)} passed), please try again.",
+            f"Face checking fail (only {len(verify_face)}/{len(images)} passed), please try again.",
         )
