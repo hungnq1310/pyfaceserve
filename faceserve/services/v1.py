@@ -131,3 +131,54 @@ class FaceServiceV1(InterfaceService):
             status.HTTP_403_FORBIDDEN,
             f"Face checking fail (only {len(verify_face)}/{len(images)} passed), please try again.",
         )
+    
+    def get_face_embs(self, image: Image.Image) -> Tuple[Any, Any]:
+        image = np.array(image)  # type: ignore
+        boxes, _, _, kpts = self.detection.inference(
+            image, get_layer="face", det_thres=self.detection_thresh
+        )
+        embeds = self.recognition.inference(image, boxes, kpts) # type: ignore
+        return boxes, embeds
+
+    def check_faces(self, images: List[Image.Image], thresh: float, group_id: str) -> dict:
+        """Check face images
+        """
+        embeds = []
+        for img in images:
+            _, res = self.get_face_embs(img)
+            if res is not None:
+                embeds.extend(res) # face_embed
+        checked = [self.facedb.check_face(x, thresh) for x in embeds] # type: ignore
+        dict_checked = []
+        for i in range(len(checked)):
+            if len(checked[i]) == 0:
+                continue
+            dict_checked.append({
+                "image_id": checked[i][0].id,
+                "person_id": checked[i][0].payload['person_id'],
+                "group_id": checked[i][0].payload['group_id'],
+            })
+        # extract to csv
+        self.dict_to_csv(dict_checked, group_id)
+
+        # N images - M faces
+        if len(images) < len(embeds):
+            return {"check_group": dict_checked}
+        # N images - N faces
+        elif len(images) == len(embeds):
+            checked = [self.facedb.check_face(x, thresh) for x in embeds] # type: ignore
+            return {"check_per_person": dict_checked}
+        
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            f"Face checking fail (only {len(checked)}/{len(images)} passed), please try again.",
+        )
+    
+    def dict_to_csv(self, data: List[dict], group_id: str = 'default') -> None:
+        import csv
+
+        keys = data[0].keys()
+        with open(f'{group_id}.csv', 'w', newline='') as output_file:
+            dict_writer = csv.DictWriter(output_file, keys)
+            dict_writer.writeheader()
+            dict_writer.writerows(data)
