@@ -87,3 +87,13 @@ async def check_face_images(request: FaceRequest, id: str|None = None, group_id:
         person_id=id, 
         group_id=group_id
     )
+
+@router.post("/check/faces")
+async def check_faces(request: FaceRequest, id: str|None = None, group_id: str = 'default'):
+    images = [base64.b64decode(x) for x in request.base64images]
+    images = [Image.open(BytesIO(x)) for x in images]
+    return service.check_faces(
+        images=images, 
+        thresh=RECOGNITION_THRESH,
+        group_id=group_id
+    )
