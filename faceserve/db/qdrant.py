@@ -161,8 +161,9 @@ class QdrantFaceDatabase(InterfaceDatabase):
         res = self._client.search(
             collection_name=self.collection_name, query_vector=face_emb, limit=1
         )
+        output = []
         if len(res) > 0:
             for r in res:
                 if r.score > thresh:
-                    return True
-        return False
+                    output.append(r)
+        return output
