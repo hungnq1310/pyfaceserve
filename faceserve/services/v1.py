@@ -7,9 +7,9 @@ from typing import Tuple, Any, List
 
 from faceserve.db.interface import InterfaceDatabase
 from faceserve.models.interface import InterfaceModel
+from faceserve.utils.save_crop import save_crop
 
 from .interface import InterfaceService
-
 
 class FaceServiceV1(InterfaceService):
     def __init__(
@@ -67,7 +67,7 @@ class FaceServiceV1(InterfaceService):
 
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            "Your face images is not valid, please try again.",
+            f"Your face images is not valid, only {len(imgs)}/{len(images)} accepted images, please try again.",
         )
 
     def register_face(self, images: List[Image.Image], id: str, group_id: str, face_folder: Path) -> List[str]:
@@ -96,6 +96,7 @@ class FaceServiceV1(InterfaceService):
         for hash, emb in zip(hashes, embeds):
             if self.facedb.get_face_by_id(hash) is not None: # function only for qdrant
                 print(f"Face hash {hash} already exists, skipping...")
+                continue
             filter_hashes.append(hash)
             filter_emb.append(emb)  
         # insert
@@ -123,7 +124,7 @@ class FaceServiceV1(InterfaceService):
         res, imgs = self.validate_face(images=images, person_id=person_id, group_id=group_id)
         #
         check_res = [self.facedb.check_face(x, thresh) for x in res] # type: ignore
-        verify_face = [True for x in check_res if len(x) == 1 else False]
+        verify_face = [True if len(x) == 1 else False for x in check_res]
         #
         if len(verify_face) >= len(imgs) / 2:
             return {"status": "ok"}
@@ -143,11 +144,14 @@ class FaceServiceV1(InterfaceService):
     def check_faces(self, images: List[Image.Image], thresh: float, group_id: str) -> dict:
         """Check face images
         """
-        embeds = []
-        for img in images:
-            _, res = self.get_face_embs(img)
+        bboxes, embeds = [], []
+        for index, img in enumerate(images):
+            bbox, res = self.get_face_embs(img)
+            save_crop(bbox, f"{group_id}_image_{index}_", img, Path("temp"), names=['face'])
+
             if res is not None:
                 embeds.extend(res) # face_embed
+                bboxes.extend(bbox) # face_bbox
         checked = [self.facedb.check_face(x, thresh) for x in embeds] # type: ignore
         dict_checked = []
         for i in range(len(checked)):
@@ -177,7 +181,7 @@ class FaceServiceV1(InterfaceService):
     def dict_to_csv(self, data: List[dict], group_id: str = 'default') -> None:
         import csv
 
-        keys = data[0].keys()
+        keys = ('image_id', 'person_id', 'group_id')
         with open(f'{group_id}.csv', 'w', newline='') as output_file:
             dict_writer = csv.DictWriter(output_file, keys)
             dict_writer.writeheader()
