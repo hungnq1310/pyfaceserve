@@ -82,8 +82,10 @@ def save_one_box(xyxy, im, file='image.jpg', gain=1.02, pad=10, square=False, BG
     # xyxy = xywh2xyxy(b)
     # clip_coords(xyxy, im.shape)
     # print(xyxy)
+    file_name = str(increment_path(file, mkdir=True).with_suffix('.jpg'))
     crop = im[int(xyxy[0, 1]):int(xyxy[0, 3]), int(xyxy[0, 0]):int(xyxy[0, 2])]
-    cv2.imwrite(str(increment_path(file, mkdir=True).with_suffix('.jpg')), crop)
+    cv2.imwrite(file_name, crop)
+    return file_name
 
 
 def scale_coords(img1_shape, coords, img0_shape, ratio_pad=None, kpt_label=False, step=2):
@@ -129,6 +131,7 @@ def plot_one_box(x, im, color=None, label=None, line_thickness=3, orig_shape=Non
             cv2.putText(im, label, (c1[0], c1[1] - 2), 0, tl / 6, [225, 255, 255], thickness=tf//2, lineType=cv2.LINE_AA)
 
 def save_crop(bboxes, path, img, save_dir, names):
+    file_crop_paths = []
     img = np.array(img)
     p = Path(path)  # to Path
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # BGR to RGB1
@@ -136,6 +139,8 @@ def save_crop(bboxes, path, img, save_dir, names):
     for det_index, xyxy in enumerate(bboxes):
         label = names[0]
         plot_one_box(xyxy, img, label=label, color=colors(0, True), line_thickness=3, orig_shape=img.shape[:2])
-        save_one_box(xyxy, img, file=save_dir / 'crops' / f'{p.stem}.jpg', BGR=True)
+        filename_crop = save_one_box(xyxy, img, file=save_dir / 'crops' / f'{p.stem}.jpg', BGR=True)
+        file_crop_paths.append(filename_crop)
     save_path = str(save_dir / p.stem) + ".jpg"  # img.jpg
     cv2.imwrite(save_path, img)
+    return file_crop_paths
