@@ -94,12 +94,16 @@ class FaceServiceV1(InterfaceService):
         # check if face's image already exists
         filter_hashes, filter_emb = [], []
         for hash, emb in zip(hashes, embeds):
-            if self.facedb.get_face_by_id(hash) is not None: # function only for qdrant
+            retrieve_result = self.facedb.get_face_by_id(hash)
+            # print(retrieve_result)
+            if retrieve_result: # function only for qdrant
                 print(f"Face hash {hash} already exists, skipping...")
                 continue
             filter_hashes.append(hash)
             filter_emb.append(emb)  
         # insert
+        if len(filter_hashes) == 0: # this code avoid print bad log when qdrant insert empty points
+            return []
         self.facedb.insert_faces(
             face_embs=zip(filter_hashes, filter_emb), 
             person_id=id, group_id=group_id
@@ -144,15 +148,20 @@ class FaceServiceV1(InterfaceService):
     def check_faces(self, images: List[Image.Image], thresh: float, group_id: str) -> dict:
         """Check face images
         """
-        bboxes, embeds = [], []
+        bboxes, embeds, file_paths = [], [], []
         for index, img in enumerate(images):
             bbox, res = self.get_face_embs(img)
-            save_crop(bbox, f"{group_id}_image_{index}_", img, Path("temp"), names=['face'])
+            file_crop_paths = save_crop(bbox, f"{group_id}_image_{index}_", img, Path("temp"), names=['face'])
 
             if res is not None:
                 embeds.extend(res) # face_embed
                 bboxes.extend(bbox) # face_bbox
+                file_paths.extend(file_crop_paths)
+
+        assert len(embeds) == len(file_paths), "Not equal"
+        assert len(bboxes) == len(file_paths), "Not equal"
         checked = [self.facedb.check_face(x, thresh) for x in embeds] # type: ignore
+        # print(checked)
         dict_checked = []
         for i in range(len(checked)):
             if len(checked[i]) == 0:
@@ -161,17 +170,17 @@ class FaceServiceV1(InterfaceService):
                 "image_id": checked[i][0].id,
                 "person_id": checked[i][0].payload['person_id'],
                 "group_id": checked[i][0].payload['group_id'],
+                'file_crop': file_paths[i]
             })
         # extract to csv
         self.dict_to_csv(dict_checked, group_id)
 
         # N images - M faces
         if len(images) < len(embeds):
-            return {"check_group": dict_checked}
+            return {"check_group": dict_checked, "num_detections": len(bboxes)}
         # N images - N faces
         elif len(images) == len(embeds):
-            checked = [self.facedb.check_face(x, thresh) for x in embeds] # type: ignore
-            return {"check_per_person": dict_checked}
+            return {"check_per_person": dict_checked, "num_detections": len(bboxes)}
         
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
@@ -181,7 +190,7 @@ class FaceServiceV1(InterfaceService):
     def dict_to_csv(self, data: List[dict], group_id: str = 'default') -> None:
         import csv
 
-        keys = ('image_id', 'person_id', 'group_id')
+        keys = ('image_id', 'person_id', 'group_id', 'file_crop')
         with open(f'{group_id}.csv', 'w', newline='') as output_file:
             dict_writer = csv.DictWriter(output_file, keys)
             dict_writer.writeheader()
