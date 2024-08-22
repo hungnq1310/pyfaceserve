@@ -1,12 +1,11 @@
 import os
-import json
 import base64
 import pathlib
 from PIL import Image
 from io import BytesIO
 from contextlib import asynccontextmanager
 
-from fastapi import APIRouter, HTTPException, status, Request
+from fastapi import APIRouter, HTTPException, status, Request, File, UploadFile
 from fastapi.staticfiles import StaticFiles
 from faceserve.services.v1 import FaceServiceV1
 from faceserve.models import HeadFace, GhostFaceNet
@@ -51,6 +50,13 @@ async def register(id: str, request: FaceRequest, groups_id: str = "default"):
     images = [Image.open(BytesIO(x)) for x in images]
     hash_imgs = service.register_face(images=images, id=id, group_id=groups_id, face_folder=FACES_IMG_DIR)
     return [f"/imgs/{groups_id}/{id}/{x}.jpg" for x in hash_imgs]
+
+
+@router.post("/register/faces")
+async def register_upload(files: list[UploadFile], id: str, group_id: str = "default"):
+    images = [Image.open(BytesIO(await x.read())) for x in files]
+    hash_imgs = service.register_face(images=images, id=id, group_id=group_id, face_folder=FACES_IMG_DIR)
+    return [f"/imgs/{group_id}/{id}/{x}.jpg" for x in hash_imgs]
 
 
 @router.get("/faces")
