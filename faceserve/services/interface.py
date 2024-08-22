@@ -9,13 +9,13 @@ class InterfaceService(ABC):
         ...
 
     @abstractmethod 
-    def check_face(self, id: str, images: List[Any], **kwargs) -> List[Any]:
+    def check_face(self, images: List[Any], **kwargs) -> List[Any]:
         ...
 
     @abstractmethod
-    def register_face(self, id: str, images: List[Any], **kwargs) -> List[Any]:
+    def register_face(self, images: List[Any], **kwargs) -> List[Any]:
         ...
 
     @abstractmethod
-    def validate_face(self, id: str, images: List[Any], **kwargs) -> List[Any]:
+    def validate_face(self, images: List[Any], **kwargs) -> List[Any]:
         ...

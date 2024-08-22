@@ -17,7 +17,7 @@ class QdrantFaceDatabase(InterfaceDatabase):
     ) -> None:
         self._client = self.connect_client(host, port, url, api_key)
         self.collection_name = collection_name
-        if  not self._client.collection_exists(collection_name):
+        if not self._client.collection_exists(collection_name):
             self.create_colection(
                 dimension=512, distance='cosine'
             )
@@ -50,9 +50,9 @@ class QdrantFaceDatabase(InterfaceDatabase):
             ),
         )
 
-    def insert_person(
+    def insert_faces(
         self, 
-        data_faces: List[Tuple[str, List[Any]]], 
+        face_embs: List[Tuple[str, List[Any]]], 
         person_id: str, 
         group_id: str, 
     ):
@@ -67,77 +67,103 @@ class QdrantFaceDatabase(InterfaceDatabase):
                         'person_id': person_id,
                         'group_id': group_id,
                     }
-                ) for hash_id, face_emb in data_faces 
+                ) for hash_id, face_emb in face_embs 
             ],
         )
 
-    #TODO: change method for below functions
-    def list_person(self):
-        '''List all faces of a given person in collection'''
-        return self._client.scroll(
-            collection_name=self.collection_name,
-            limit=1000,
-            with_payload=True,
-        )
-
-    def delete_person(self, person_id):
-        '''Delete all faces of a given person in collection'''
-        self._client.delete(
-            collection_name=self.collection_name,
-            points_selector=models.FilterSelector(
-                filter=models.Filter(
+    def delete_face(self, face_id: str|None, person_id: str|None, group_id: str|None):
+        '''Delete a face of a given person's id or group's id in collection'''
+        assert person_id is not None and group_id is not None, "person_id and group_id cannot be None at the same time"
+        if group_id is not None:
+            self._client.delete(
+                collection_name=self.collection_name,
+                points_selector=models.FilterSelector(filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="group_id",
+                            match=models.MatchValue(value=f"{group_id}"),
+                        ),
+                    ])
+                ),
+            )
+        elif person_id is not None:
+            self._client.delete(
+                collection_name=self.collection_name,
+                points_selector=models.FilterSelector(filter=models.Filter(
                     must=[
                         models.FieldCondition(
                             key="person_id",
                             match=models.MatchValue(value=f"{person_id}"),
                         ),
-                    ],
+                    ])
+                ),
+            )
+        else:
+            self._client.delete(
+                collection_name=self.collection_name, 
+                points_selector=models.PointIdsList(
+                    points=[face_id]
                 )
-            ),
-        )
+            )
 
-    def insert_face(self, face_emb, face_id, person_id, group_id):    
-        '''Insert a face of a person to collection'''
-        self._client.upsert(
-            collection_name=self.collection_name,
-            points=[models.PointStruct(
-                id=face_id, 
-                vector=face_emb, 
-                payload={
-                    'person_id': person_id,
-                    'group_id': group_id,
-                }
-            )],
-        )
-
-    def list_face(self, person_id):
-        '''List all faces of a given person in collection'''
+    def list_faces(self, person_id: str|None, group_id: str|None):
+        '''List all faces of a given person's id or group's id in collection'''
+        if person_id is not None and group_id is not None:
+            return self._client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="group_id", match=models.MatchValue(value=f"{group_id}")
+                        ),
+                        models.FieldCondition(
+                            key="person_id", match=models.MatchValue(value=f"{person_id}")
+                        ),
+                    ],
+                ),
+            )
+        elif person_id is None and group_id is not None:
+            return self._client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="group_id", match=models.MatchValue(value=f"{group_id}")
+                        ),
+                    ],
+                ),
+            )
+        elif person_id is not None and group_id is None:
+            return self._client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="person_id", match=models.MatchValue(value=f"{person_id}")
+                        ),
+                    ],
+                ),
+            )
         return self._client.scroll(
             collection_name=self.collection_name,
-            scroll_filter=models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="person_id", match=models.MatchValue(value=f"{person_id}")
-                    ),
-                ],
-            ),
+            limit=1000,
+            with_payload=True,
+        )
+    
+    def get_face_by_id(self, face_id: str):
+        '''Get a face of a given face id in collection'''
+        return self._client.retrieve(
+            collection_name=self.collection_name,
+            ids=[face_id],
         )
 
-    def delete_face(self, face_id):
-        self._client.delete(
-            collection_name=self.collection_name, 
-            points_selector=models.PointIdsList(
-                points=[face_id]
-            )
-        )
-
-    #TODO: consistency with interface class
     def check_face(self, face_emb, thresh):
         res = self._client.search(
             collection_name=self.collection_name, query_vector=face_emb, limit=1
         )
+        output = []
         if len(res) > 0:
             for r in res:
                 if r.score > thresh:
-                    return True
-        return False
+                    output.append(r)
+        return output

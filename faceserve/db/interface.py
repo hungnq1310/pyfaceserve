@@ -12,23 +12,11 @@ class InterfaceDatabase(ABC):
         return NotImplemented
 
     @abstractmethod
-    def insert_person(self, data_faces, **kwargs):
+    def insert_faces(self, face_embs, **kwargs):
         return NotImplemented
 
     @abstractmethod
-    def list_person(self, **kwargs):
-        return NotImplemented
-
-    @abstractmethod
-    def delete_person(self, person_id, **kwargs):
-        return NotImplemented
-
-    @abstractmethod
-    def insert_face(self, face_emb, **kwargs):
-        return NotImplemented
-
-    @abstractmethod
-    def list_face(self, person_id, **kwargs):
+    def list_faces(self, **kwargs):
         return NotImplemented
 
     @abstractmethod

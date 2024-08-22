@@ -1,13 +1,14 @@
 import os
-import json
 import base64
 import pathlib
 from PIL import Image
 from io import BytesIO
-from fastapi import APIRouter, HTTPException, status
+from contextlib import asynccontextmanager
 
+from fastapi import APIRouter, HTTPException, status, Request, File, UploadFile
+from fastapi.staticfiles import StaticFiles
 from faceserve.services.v1 import FaceServiceV1
-from faceserve.models import HeadFace, SpoofingNet, GhostFaceNet
+from faceserve.models import HeadFace, GhostFaceNet
 from faceserve.db.qdrant import QdrantFaceDatabase
 from faceserve.schema.face_request import FaceRequest
 
@@ -16,12 +17,10 @@ Load models and thresh.
 """
 # Model
 DETECTION = HeadFace(os.getenv("DETECTION_MODEL_PATH", default="weights/yolov7-hf-v1.onnx"))
-SPOOFING = SpoofingNet(os.getenv("SPOOFING_MODEL_PATH", default="weights/OCI2M.onnx"))
 RECOGNITION = GhostFaceNet(os.getenv("RECOGNITION_MODEL_PATH", default="weights/ghostnetv1.onnx"))
 # Threshold
-DETECTION_THRESH = os.getenv("DETECTION_THRESH", default=0.5)
-SPOOFING_THRESH = os.getenv("SPOOFING_THRESH", default=0.6)
-RECOGNITION_THRESH = os.getenv("RECOGNITION_THRESH", default=0.1)
+DETECTION_THRESH = os.getenv("DETECTION_THRESH", default=0.7)
+RECOGNITION_THRESH = os.getenv("RECOGNITION_THRESH", default=0.4)
 # Face db storage.
 FACES = QdrantFaceDatabase(
     collection_name="faces_collection",
@@ -35,8 +34,6 @@ Initialize Services
 service = FaceServiceV1(
     detection=DETECTION,
     detection_thresh=DETECTION_THRESH,
-    spoofing=SPOOFING,
-    spoofing_thresh=SPOOFING_THRESH,
     recognition=RECOGNITION,
     recognition_thresh=RECOGNITION_THRESH,
     facedb=FACES,
@@ -47,45 +44,62 @@ Router
 """
 router = APIRouter(prefix="/v1")
 
-# @router.post("/id")
-# async def create_id(id: str, files: List[UploadFile]):
-#     try:
-#         FACES.insert_person(person_id=id)
-#     except:
-#         raise HTTPException(
-#             status_code=status.HTTP_406_NOT_ACCEPTABLE, detail="Cannot create ID"
-#         )
-
-
 @router.post("/register")
-async def register(id: str, request: FaceRequest):
+async def register(id: str, request: FaceRequest, groups_id: str = "default"):
     images = [base64.b64decode(x) for x in request.base64images]
     images = [Image.open(BytesIO(x)) for x in images]
-    images = service.register_face(id, images, FACES_IMG_DIR)
-    images = [f"/imgs/{id}/{x}.jpg" for x in images]
-    return images
+    hash_imgs = service.register_face(images=images, id=id, group_id=groups_id, face_folder=FACES_IMG_DIR)
+    return [f"/imgs/{groups_id}/{id}/{x}.jpg" for x in hash_imgs]
+
+
+@router.post("/register/faces")
+async def register_upload(files: list[UploadFile], id: str, group_id: str = "default"):
+    images = [Image.open(BytesIO(await x.read())) for x in files]
+    hash_imgs = service.register_face(images=images, id=id, group_id=group_id, face_folder=FACES_IMG_DIR)
+    return [f"/imgs/{group_id}/{id}/{x}.jpg" for x in hash_imgs]
 
 
 @router.get("/faces")
-async def get_faces():
-    dict_record = [x.__dict__ for x in FACES.list_person()[0] if x is not None]
-    return json.dumps(dict_record)
-
-
-@router.get("/faces/person")
-async def get_face_image(id: str):
-    if not FACES.list_face(id)[0]:
+async def get_face_image(id: str|None = None, group_id: str|None = None):
+    if not FACES.list_faces(person_id=id, group_id=group_id)[0]:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=f"Person ID {id} is not founded"
+            status_code=status.HTTP_403_FORBIDDEN, detail="No image found, database empty"
         )
-    # res = [f'/imgs/{id}/{k}' for k in os.listdir(FACES_IMG_DIR.joinpath(f'{id}')) if k.endswith(".jpg")]
-    res = ["".join(x.id.split("-")) for x in FACES.list_face(id)[0] if x is not None]
-    res = [f"/imgs/{id}/{x}.jpg" for x in res]
-    return res
+    res = [x for x in FACES.list_faces(person_id=id, group_id=group_id)[0] if x is not None]
+    output = []
+    for x in res:
+        res_group = x.payload["group_id"]
+        res_person = x.payload["person_id"]
+        res_hash = "".join(x.id.split("-"))
+        output.append(f"/imgs/{res_group}/{res_person}/{res_hash}.jpg")
+    return output
+
+@router.delete("/delete")
+async def delete_face(face_id: str|None = None, id: str|None = None, group_id: str|None = None):
+    return FACES.delete_face(
+        face_id=face_id, 
+        person_id=id, 
+        group_id=group_id
+    )
 
 
-@router.post("/check")
-async def check_face_images(id: str, request: FaceRequest):
+@router.post("/check/face")
+async def check_face_images(request: FaceRequest, id: str|None = None, group_id: str|None = None):
     images = [base64.b64decode(x) for x in request.base64images]
     images = [Image.open(BytesIO(x)) for x in images]
-    return service.check_face(id, images, RECOGNITION_THRESH)
+    return service.check_face(
+        images=images, 
+        thresh=RECOGNITION_THRESH, 
+        person_id=id, 
+        group_id=group_id
+    )
+
+@router.post("/check/faces")
+async def check_faces(request: FaceRequest, id: str|None = None, group_id: str = 'default'):
+    images = [base64.b64decode(x) for x in request.base64images]
+    images = [Image.open(BytesIO(x)) for x in images]
+    return service.check_faces(
+        images=images, 
+        thresh=RECOGNITION_THRESH,
+        group_id=group_id
+    )
