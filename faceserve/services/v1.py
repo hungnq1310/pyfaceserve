@@ -44,7 +44,7 @@ class FaceServiceV1(InterfaceService):
             return boxes[0], res[0]
         return [], []
 
-    def validate_face(self, images: List[Image.Image], person_id: str|None, group_id: str|None) -> Tuple[List[Any], List[Image.Image]]:
+    def validate_face(self, images: List[Image.Image], person_id: str, group_id: str) -> Tuple[List[Any], List[Image.Image]]:
         """Validate face images
 
         Args:
@@ -114,7 +114,7 @@ class FaceServiceV1(InterfaceService):
         return hashes
 
 
-    def check_face(self, images: List[Image.Image], thresh: float, person_id: str|None, group_id: str|None) -> dict:
+    def check_face(self, images: List[Image.Image], thresh: float, person_id: str, group_id: str) -> dict:
         """Check face images
 
         Args:
