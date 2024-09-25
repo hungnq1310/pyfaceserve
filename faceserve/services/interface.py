@@ -1,4 +1,4 @@
-from typing import List, Any
+from typing import List, Any, Tuple
 from abc import ABC, abstractmethod
 
 class InterfaceService(ABC):
@@ -17,5 +17,5 @@ class InterfaceService(ABC):
         ...
 
     @abstractmethod
-    def validate_face(self, images: List[Any], **kwargs) -> List[Any]:
+    def validate_face(self, images: List[Any], **kwargs) -> Tuple[List[Any], List[Any]]:
         ...
