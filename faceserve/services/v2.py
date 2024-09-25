@@ -76,27 +76,18 @@ class FaceServiceV2(InterfaceService):
         # get temp result
         return embeddings, valid_imgs
     
-    def detect_face(self, images: List[np.ndarray]) -> Tuple[List[Any], List[Any]]:
-
-        # preprocess_images = [self.preprocess(image) for image in images]
-        preprocess_images = ...
+    def detect_face(self, images: List[np.ndarray]):
+        # preprocess
+        preprocess_images = [self.preprocess(image) for image in images]
         input_images = np.array([image[0] for image in preprocess_images])
-        ratios = [image[1] for image in preprocess_images]
-        dwdhs = [image[2] for image in preprocess_images]
-        
-        _, face_detects = self.headface.run(data=[input_images])
-        bboxes, _, _, kpts = [], [], [], []
-        for index, face_detect in enumerate(face_detects):
-            bbox, _, _, kpt = self.postprocess(
-                face_detect, ratios[index], dwdhs[index], det_thres=self.detection_thresh
-            )
-            bboxes.append(bbox)
-            kpts.append(kpt)
-
-        # some assertion
-        assert len(bboxes) == len(images), 'Number of batch bboxes and batch images are not the same'
-        assert len(kpts) == len(images), 'Number of batch keypoints and batch images are not the same'
-        return bboxes, kpts
+        ratios = np.array([image[1] for image in preprocess_images])
+        dwdhs = np.array([image[2] for image in preprocess_images])
+        # call API
+        outputs = self.headface.run(data=[input_images])['2833']
+        index_images, bboxes, _, _, kpts = self.postprocess(
+            outputs, ratios, dwdhs, det_thres=self.detection_thresh
+        )
+        return index_images, bboxes, kpts
 
     def check_face(self, images: List[np.ndarray], thresh: float, group_id: str) -> dict:
         """Check face images
@@ -183,23 +174,40 @@ class FaceServiceV2(InterfaceService):
         
         
 
-    def register_face(self, images: List[np.ndarray], person_id: str, group_id: str):
-        # TODO:
-        # case image is one person
-        # case preprocess
+    def register_face(self, images: List[np.ndarray], person_id: str, group_id: str, face_folder: Path) -> dict:
+        """
+        Register face images
+
+        Args:
+            images (List[np.ndarray]): face images
+            person_id (str): person id
+            group_id (str): group id
+            face_folder (Path): face folder
+
+        Returns:
+            dict: message
+        """
         # 1. detect faces in each image -> List of List
-        bboxes, kpts = self.detect_face(images=images)
+        _, bboxes, kpts = self.detect_face(images=images)
         # 2. crop and align face -> List of List
-        crops = self.crop_and_align_face(images, bboxes, kpts)
+        assert len(bboxes) == len(images), 'Number of batch bboxes and batch images are not the same'
+        assert len(kpts) == len(images), 'Number of batch keypoints and batch images are not the same'
+        batch_crops = []
+        for i, image in enumerate(images):
+            crops_per_image = self.crop_and_align_face(image, bboxes[i], kpts[i])
+            batch_crops.extend(crops_per_image)
         # 3. get valid face -> List of List
-        embeddings, crops = self.validate_face(crops)
+        embeddings, valid_crops = self.validate_face(batch_crops)
         # 4. save crop to folder
-        if len(crops) < len(images) / 2:
+        if len(valid_crops) < len(images) / 2:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
-                f"Your face images is not valid, only {len(crops)}/{len(images)} accepted images, please try again.",
+                f"Your face images is not valid, only {len(valid_crops)}/{len(images)} accepted images, please try again.",
             )
-        # 5. save face embedding to database
+        # 5. save face embedding to local
+        for i, crop in enumerate(valid_crops):
+            cv2.imwrite(str(face_folder / f"{group_id}_{person_id}_{i}.jpg"), crop)
+        # 6. save face embedding to database
         self.facedb.insert_faces(
             face_embs=embeddings,
             group_id=group_id,
