@@ -21,6 +21,7 @@ class FaceServiceV2(InterfaceService):
     '''FaceServiceV2'''
     def __init__(self, 
         triton_server_url: str,
+        is_grpc: bool,
         headface_name: str,             
         ghostfacenet_name: str,
         anti_spoofing_name: str,
@@ -28,9 +29,9 @@ class FaceServiceV2(InterfaceService):
         detection_thresh: float,
         recognition_thresh: float,
     ):
-        self.headface = TritonModel(headface_name, 1, triton_server_url)
-        self.ghostfacenet = TritonModel(ghostfacenet_name, 1, triton_server_url)
-        self.anti_spoofing = TritonModel(anti_spoofing_name, 1, triton_server_url)
+        self.headface = TritonModel(headface_name, 0, triton_server_url, is_grpc)
+        self.ghostfacenet = TritonModel(ghostfacenet_name, 0, triton_server_url, is_grpc)
+        self.anti_spoofing = TritonModel(anti_spoofing_name, 0, triton_server_url, is_grpc)
         self.facedb = facedb
         self.detection_thresh = detection_thresh
         self.recognition_thresh = recognition_thresh
@@ -249,6 +250,8 @@ class FaceServiceV2(InterfaceService):
             dw, dh: padding follow by yolo processing
         """
         # Resize and pad image while meeting stride-multiple constraints
+        if isinstance(image, Image.Image):
+            image = np.array(image)
         shape = image.shape[:2]  # current shape [height, width]
         
         if isinstance(new_shape, int):
@@ -274,27 +277,40 @@ class FaceServiceV2(InterfaceService):
         image = cv2.copyMakeBorder(image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
         
         image = image.transpose((2, 0, 1))
-        image = np.expand_dims(image, 0)
         image = np.ascontiguousarray(image, dtype=np.float32)
         image /= 255
         
         return image, r, (dw, dh)
 
-    def postprocess(face_detect_batch, ratio, dwdh, det_thres=0.5):
+    def postprocess(self, face_detect_batch, ratios, dwdhs, det_thres=0.5):
+        """Processing output model match output format
+
+        Args:
+            face_detect_batch (np.array): output of face detection model
+            ratios (float): ratio between original and new shape
+            dwdhs (tuple): padding follow by yolo processing
+            det_thres (float, optional): detection threshold. Defaults to 0.5.
+            
+        Returns:
+            Tuple: index_images, det_bboxes, det_scores, det_labels, kpts
+        """
+        # wrap numpy
         if isinstance(face_detect_batch, list):
             face_detect_batch = np.array(face_detect_batch)
-            
-        pred = face_detect_batch[face_detect_batch[:, 6] > det_thres] # get sample higher than threshold
-        
-        padding = dwdh*2
-        det_bboxes, det_scores, det_labels  = pred[:,1:5], pred[:,6], pred[:, 5]
+        # scale: x,y -> x,y,x,y
+        padding = np.concatenate([dwdhs, dwdhs], axis=1)
+        # get sample higher than threshold
+        pred = face_detect_batch[face_detect_batch[:, 6] > det_thres] 
+        # get index, bbox, score, label, ketpoint
+        index_images, det_bboxes, det_scores, det_labels  = pred[:, 0], pred[:,1:5], pred[:,6], pred[:, 5]
         kpts = pred[:, 7:] if pred.shape[1] > 6 else None
-        det_bboxes = (det_bboxes[:, 0::] - np.array(padding)) / ratio
-        
+        # Filter, Normalize
+        det_bboxes -= np.array(padding)
+        det_bboxes /= np.array(ratios)        
         if kpts is not None:
-            kpts[:,0::3] = (kpts[:,0::3] - np.array(padding[0])) / ratio
-            kpts[:,1::3] = (kpts[:,1::3]- np.array(padding[1])) / ratio
-
-        return det_bboxes, det_scores, det_labels, kpts
+            kpts[:,0::3] = (kpts[:,0::3] - np.array(padding[:, 0])) / ratios
+            kpts[:,1::3] = (kpts[:,1::3]- np.array(padding[:, 1])) / ratios
+        # return
+        return index_images, det_bboxes, det_scores, det_labels, kpts
         
 
