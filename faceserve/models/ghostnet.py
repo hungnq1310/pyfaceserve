@@ -3,7 +3,7 @@ from pydantic import Field
 import cv2
 import numpy as np
 import onnxruntime as ort
-import os
+from pathlib import Path
 
 from faceserve.utils import face, crop_image
 from .interface import InterfaceModel
@@ -26,7 +26,7 @@ class GhostFaceNet(InterfaceModel):
         _, h, w, _ = self._model.get_inputs()[0].shape
         self.model_input_size = (w, h)
 
-    def load_model(self, path: str | bytes | os.PathLike) -> ort.InferenceSession:
+    def load_model(self, path: Path) -> ort.InferenceSession:
         return ort.InferenceSession(
             path,
             sess_options=sess_options,
