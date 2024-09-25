@@ -71,7 +71,7 @@ class QdrantFaceDatabase(InterfaceDatabase):
             ],
         )
 
-    def delete_face(self, face_id: str|None, person_id: str|None, group_id: str|None):
+    def delete_face(self, face_id: str, person_id: str, group_id: str):
         '''Delete a face of a given person's id or group's id in collection'''
         assert person_id is not None and group_id is not None, "person_id and group_id cannot be None at the same time"
         if group_id is not None:
@@ -106,7 +106,7 @@ class QdrantFaceDatabase(InterfaceDatabase):
                 )
             )
 
-    def list_faces(self, person_id: str|None, group_id: str|None):
+    def list_faces(self, person_id: str, group_id: str):
         '''List all faces of a given person's id or group's id in collection'''
         if person_id is not None and group_id is not None:
             return self._client.scroll(
