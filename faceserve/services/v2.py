@@ -89,49 +89,35 @@ class FaceServiceV2(InterfaceService):
         )
         return index_images, bboxes, kpts
 
-    def check_face(self, images: List[np.ndarray], thresh: float, group_id: str) -> dict:
+    def check_face(self, image: np.ndarray, thresh: float, group_id: str) -> dict:
         """Check face images
         """
-        valid_embeddings, valid_faces, file_paths = [], [], []
-        # TODO:
         # 1. detect faces in each image -> List of List
-        batch_bboxes, batch_kpts = self.detect_face(images=images)
+        _, batch_bboxes, batch_kpts = self.detect_face(images=[image])
+
         # 2. crop and align face -> List of List
-        batch_crops= []
-        for i, image in enumerate(images):
-            crops_per_image = self.crop_and_align_face(image, batch_bboxes[i], batch_kpts[i]) # Image, Image's bboxes, Image's kpts
-            batch_crops.append(crops_per_image)
-
+        crops = self.crop_and_align_face(image, batch_bboxes, batch_kpts)
         # 3. get valid face -> List of List
-        batch_embeds, batch_crops = [], []
-        for i, crops in enumerate(batch_crops):
-            embeddings, valid_crops = self.validate_face(crops)
-            for j, crop in enumerate(crops):
-                if embeddings[j] is None:
-                    embeddings.remove(embeddings[j])
-                    valid_crops.remove(valid_crops[j])
+        embeddings, valid_crops = self.validate_face(crops)
 
-            batch_embeds.append(embeddings)
-            batch_crops.append(valid_crops)
+        # 4. Filter invalid face
+        for j, crop in enumerate(crops):
+            if embeddings[j] is None:
+                embeddings.remove(embeddings[j])
+                valid_crops.remove(valid_crops[j])
 
-        assert len(batch_embeds) == len(batch_bboxes), 'Number of embeddings and bboxes are not the same'
-        assert len(batch_crops) == len(batch_bboxes), 'Number of crops and bboxes are not the same'
-
-        for i, bboxes in enumerate(batch_bboxes):
-            file_crop_paths = save_crop(
-                bboxes=bboxes, 
-                path=f"{group_id}_image_{i}_", 
-                img=images[i], #* this is the original image 
-                save_dir=Path("temp"), 
-                names=['face']
-            )
-            file_paths.append(file_crop_paths)                
+        # 5. save crop to folder
+        file_crop_paths = save_crop(
+            bboxes=batch_bboxes, 
+            path=f"{group_id}_image_{i}_", 
+            img=image, #* this is the original image 
+            save_dir=Path("temp"), 
+            names=['face']
+        )               
 
         # check face
-        check_batch = []
-        for embeddings in batch_embeds:
-            check_batch.append([self.facedb.check_face(x, thresh) for x in embeddings])
-        # print(checked)
+        check_batch = [self.facedb.check_face(x, thresh) for x in embeddings]
+        print(check_batch)
 
         #TODO: turn check_batch into dict_checked
         dict_checked = []
@@ -142,25 +128,26 @@ class FaceServiceV2(InterfaceService):
                 if len(check_batch[i][j]) == 0:
                     continue
                 dict_checked.append({
-                    "image_id": check_batch[i][j][0].id,
-                    "person_id": check_batch[i][j][0].payload['person_id'],
-                    "group_id": check_batch[i][j][0].payload['group_id'],
-                    'file_crop': file_paths[i][j]
+                    "image_id": check_batch[i][0].id,
+                    "person_id": check_batch[i][0].payload['person_id'],
+                    "group_id": check_batch[i][0].payload['group_id'],
+                    'file_crop': file_crop_paths[i]
                 })
         # extract to csv
         self.dict_to_csv(dict_checked, group_id)
 
         # N images - M faces
-        # if len(valid_crops) < len(images):
-        return {"check_group": dict_checked}
+        if len(valid_crops) > 1:
+            return {"check_group": dict_checked}
         # N images - N faces
-        # elif len(valid_crops) == len(images):
-        #     return {"check_per_person": dict_checked, "num_detections": len(bboxes)}
+        elif len(valid_crops) == 1:
+            return {"check_per_person": dict_checked, "num_detections": len(batch_bboxes)}
         
-        # raise HTTPException(
-        #     status.HTTP_403_FORBIDDEN,
-        #     f"Face checking fail (only {len(checked)}/{len(images)} passed), please try again.",
-        # )
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            f"Face checking fail (No detection: {len(check_batch)}/1), please try again.",
+        )
+    
     
     def dict_to_csv(self, data: List[dict], group_id: str = 'default') -> None:
         import csv
