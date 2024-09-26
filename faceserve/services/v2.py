@@ -31,6 +31,7 @@ class FaceServiceV2(InterfaceService):
         anti_spoofing_name: str,
         facedb: InterfaceDatabase,
         detection_thresh: float,
+        spoofing_thresh: float,
         recognition_thresh: float,
     ):
         self.headface = TritonModel(headface_name, 0, triton_server_url, is_grpc)
@@ -38,6 +39,7 @@ class FaceServiceV2(InterfaceService):
         self.anti_spoofing = TritonModel(anti_spoofing_name, 0, triton_server_url, is_grpc)
         self.facedb = facedb
         self.detection_thresh = detection_thresh
+        self.spoofing_thresh = spoofing_thresh
         self.recognition_thresh = recognition_thresh
 
 
@@ -78,7 +80,7 @@ class FaceServiceV2(InterfaceService):
         result_softmax = sigmoid(result_spoofing['output'])
 
         for i in range(len(temp)):
-            if result_softmax[i] > self.recognition_thresh:
+            if result_softmax[i] > self.spoofing_thresh:
                 embeddings.append(temp[i])
                 valid_imgs.append(images[i])
             else:

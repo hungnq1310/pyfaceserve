@@ -16,14 +16,16 @@ Load models and thresh.
 """
 load_dotenv()
 # Model
-TRITON_URL = os.getenv("TRITON_URL", default="localhost:8000")
+TRITON_URL = os.getenv("TRITON_URL", default="localhost:6000")
+IS_GRPC = os.getenv("IS_GRPC", default=False)
 DETECTION_NAME= os.getenv("DETECTION_NAME", default="face_detection")
 SPOOFING_NAME = os.getenv("SPOOFING_NAME", default="face_spoofing")
 RECOGNITION_NAME = os.getenv("RECOGNITION_NAME", default="face_recognition")
 
 # Threshold
-DETECTION_THRESH = os.getenv("DETECTION_THRESH", default=0.7)
-RECOGNITION_THRESH = os.getenv("RECOGNITION_THRESH", default=0.4)
+DETECTION_THRESH = float(os.getenv("DETECTION_THRESH", default=0.7))
+SPOOFING_THRESH = float(os.getenv("SPOOFING_THRESH", default=0.4))
+RECOGNITION_THRESH = float(os.getenv("RECOGNITION_THRESH", default=0.4))
 # Face db storage.
 FACES = QdrantFaceDatabase(
     collection_name="faces_collection",
@@ -36,11 +38,13 @@ Initialize Services
 """
 service = FaceServiceV2(
     triton_server_url=TRITON_URL,
+    is_grpc=IS_GRPC,
     headface_name=DETECTION_NAME,
     ghostfacenet_name=RECOGNITION_NAME,
     anti_spoofing_name=SPOOFING_NAME,
     facedb=FACES,
     detection_thresh=DETECTION_THRESH,
+    spoofing_thresh=SPOOFING_THRESH,
     recognition_thresh=RECOGNITION_THRESH,
 )
 
@@ -61,9 +65,9 @@ async def register(id: str, request: FaceRequest, groups_id: str = "default"):
 
 @router.post("/register/faces")
 async def register_upload(files: list[UploadFile], id: str, group_id: str = "default"):
-    images = [Image.open(BytesIO(await x.read())) for x in files]
+    images = [Image.open(BytesIO(await x.read())).convert("RGB") for x in files]
     hash_imgs = service.register_face(
-        images=images, id=id, group_id=group_id, face_folder=FACES_IMG_DIR
+        images=images, person_id=id, group_id=group_id, face_folder=FACES_IMG_DIR
     )
     return [f"/imgs/{group_id}/{id}/{x}.jpg" for x in hash_imgs]
 
