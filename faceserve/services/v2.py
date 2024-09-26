@@ -2,6 +2,7 @@ import numpy as np
 from PIL import Image
 from typing import List, Tuple, Any
 from pathlib import Path
+import hashlib
 
 from trism import TritonModel
 from faceserve.services.interface import InterfaceService
@@ -153,6 +154,8 @@ class FaceServiceV2(InterfaceService):
             # Align face
             kpt_wrap = np.array([[kpt[i], kpt[i+1]] for i in range(0, len(kpt), 3)])
             image_align = face_align_landmarks_sk(image, kpt_wrap)
+            # DEBUG:
+            Image.fromarray(image_align).save('debug4.jpg')
             crops.append(image_align)
         return crops
 
@@ -254,18 +257,19 @@ class FaceServiceV2(InterfaceService):
                 status.HTTP_403_FORBIDDEN,
                 f"Your face images is not valid, only {len(valid_crops)}/{len(images)} accepted images, please try again.",
             )
-        # 5. save face embedding to local
-        #? valide crops is 16 for 4 images
+        # 5. save and hash face embedding to local
+        hashes = []
         for i, crop in enumerate(valid_crops):
             if crop.shape[0] == 3:
                 crop = np.transpose(crop, (1, 2, 0)) 
             crop *= 255
             crop = crop.astype(np.uint8)
             crop_pil = Image.fromarray(crop)
+            hashes.append(hashlib.md5(crop_pil.tobytes()).hexdigest())
             crop_pil.save(str(face_folder / f"{group_id}_{person_id}_{i}.jpg"))
         # 6. save face embedding to database
         self.facedb.insert_faces(
-            face_embs=embeddings,
+            face_embs=zip(hashes, embeddings),
             group_id=group_id,
             person_id=person_id
         )
