@@ -7,7 +7,7 @@ from pathlib import Path
 from trism import TritonModel
 from faceserve.services.interface import InterfaceService
 from faceserve.db.interface import InterfaceDatabase
-from faceserve.utils import crop_image, align_5_points, preprocess
+from faceserve.utils import crop_image, face_align_landmarks_sk, preprocess
 
 from faceserve.utils.save_crop import save_crop
 
@@ -146,10 +146,11 @@ class FaceServiceV2(InterfaceService):
         crops = []        
         # dets are of different sizes so batch preprocessing is not possible
         for box, kpt in zip(xyxys, kpts):
+            # Crop face
             crop = crop_image(image, box)
             # Align face
-            # Crop face
-            crop = align_5_points(crop, kpt)
+            kpt_wrap = [[kpt[i], kpt[i+1]] for i in range(0, len(kpt), 3)]
+            crop = face_align_landmarks_sk(crop, kpt_wrap)
             crops.append(crop)
         return crops
 
