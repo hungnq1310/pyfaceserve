@@ -1,27 +1,34 @@
-import cv2
-import math
+import cupy as cp
+from cucim.skimage import transform
 
 
-def align_5_points(face, points):
-    # 5 points align
-    # left eye, right eye, nose, left mouth, right mouth
-    left_eye = points[0:2]
-    right_eye = points[3:5]
-    # Calculate the vertical difference between eye keypoints
-    dy = left_eye[1] - right_eye[1]
-    # Rotation degree
-    if dy < 0:
-        # need to rotate counter-clockwise
-        angle = math.degrees(math.atan(abs(dy) / (right_eye[0] - left_eye[0])))
-    else:
-        # need to rotate clockwise
-        angle = -math.degrees(math.atan(abs(dy) / (right_eye[0] - left_eye[0])))
-    # get the scale for eyes
-    scale = 1
-    # get the rotation matrix
-    M = cv2.getRotationMatrix2D(left_eye.astype(float), angle, scale)
-    # apply the affine transformation
-    aligned = cv2.warpAffine(
-        face, M, (face.shape[1], face.shape[0]), flags=cv2.INTER_CUBIC
-    )
-    return aligned
+src = cp.array(
+    [
+        [38.2946, 51.6963],
+        [73.5318, 51.5014],
+        [56.0252, 71.7366],
+        [41.5493, 92.3655],
+        [70.729904, 92.2041],
+    ],
+    dtype=cp.float32,
+)
+original_size = 112
+
+def face_align_landmarks_sk(img, landmarks, image_size=(112, 112), method="affine"):
+    # Convert inputs to CuPy arrays if they are not already
+    img_cp = cp.asarray(img)
+    landmarks_cp = cp.asarray(landmarks)
+    
+    # Choose transformation method
+    tform = transform.AffineTransform() if method == "affine" else transform.SimilarityTransform()
+    
+    # Compute scale factor outside of the loop or transformation process
+    scale_factor = image_size[0] / original_size
+    _src = src * scale_factor
+    
+    # Estimate transformation and apply warp
+    tform.estimate(landmarks_cp, _src)
+    warped_image = transform.warp(img_cp, tform.inverse, output_shape=image_size)
+    # Convert back to uint8 and return
+    output = (warped_image * 255).astype(cp.uint8).get()
+    return output
