@@ -1,5 +1,4 @@
 import numpy as np
-import cv2
 from PIL import Image
 from typing import List, Tuple, Any
 from pathlib import Path
@@ -150,13 +149,11 @@ class FaceServiceV2(InterfaceService):
             image = np.array(image)
         crops = []        
         # dets are of different sizes so batch preprocessing is not possible
-        for box, kpt in zip(xyxys, kpts):
-            # Crop face
-            crop = crop_image(image, box)
+        for kpt in kpts:
             # Align face
-            kpt_wrap = [[kpt[i], kpt[i+1]] for i in range(0, len(kpt), 3)]
-            crop = face_align_landmarks_sk(crop, kpt_wrap)
-            crops.append(crop)
+            kpt_wrap = np.array([[kpt[i], kpt[i+1]] for i in range(0, len(kpt), 3)])
+            image_align = face_align_landmarks_sk(image, kpt_wrap)
+            crops.append(image_align)
         return crops
 
     def dict_to_csv(self, data: List[dict], group_id: str = 'default') -> None:
@@ -260,7 +257,12 @@ class FaceServiceV2(InterfaceService):
         # 5. save face embedding to local
         #? valide crops is 16 for 4 images
         for i, crop in enumerate(valid_crops):
-            cv2.imwrite(str(face_folder / f"{group_id}_{person_id}_{i}.jpg"), crop)
+            if crop.shape[0] == 3:
+                crop = np.transpose(crop, (1, 2, 0)) 
+            crop *= 255
+            crop = crop.astype(np.uint8)
+            crop_pil = Image.fromarray(crop)
+            crop_pil.save(str(face_folder / f"{group_id}_{person_id}_{i}.jpg"))
         # 6. save face embedding to database
         self.facedb.insert_faces(
             face_embs=embeddings,
