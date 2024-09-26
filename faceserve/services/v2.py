@@ -16,7 +16,10 @@ from faceserve.utils.save_crop import save_crop
 from fastapi import HTTPException, status
 
 def softmax(x):
-    return np.exp(x) / np.sum(np.exp(x))
+    return 1 / np.sum(np.exp(x))
+
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x)) 
 
 class FaceServiceV2(InterfaceService):
     '''FaceServiceV2'''
@@ -72,7 +75,7 @@ class FaceServiceV2(InterfaceService):
         ])
 
         result_spoofing = self.anti_spoofing.run(data=[images])
-        result_softmax = softmax(result_spoofing['output'])
+        result_softmax = sigmoid(result_spoofing['output'])
 
         for i in range(len(temp)):
             if result_softmax[i] > self.recognition_thresh:
