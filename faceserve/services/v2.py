@@ -42,7 +42,7 @@ class FaceServiceV2(InterfaceService):
     ### Core Modules
     ###
 
-    def get_face_emb(self, images, **kwargs):
+    def get_face_emb(self, images: List[np.ndarray]) -> Any:
         """
         Get face embedding from face image
         
@@ -52,14 +52,10 @@ class FaceServiceV2(InterfaceService):
         Returns:
             Tuple[Any, Any]: face bounding boxes, face embeddings
         """
-        if isinstance(images, list):
-            images = np.array(images)
-
         images = [
-            cv2.resize(np.swapaxes(image, 0, 2), (112, 112))
+            preprocess(image, new_shape=(112, 112), channel_first=False, normalize=False)[0] # get image only
             for image in images
         ]
-        
         emds = self.ghostfacenet.run([np.array(images)]) # get face embedding
         print("emds: ", emds)
         return emds
@@ -70,7 +66,10 @@ class FaceServiceV2(InterfaceService):
         embeddings, valid_imgs, temp = [], [], self.get_face_emb(images=images)
         temp = temp['embedding']
         # 2. Check if face is valid by using spoofing model
-        images = np.array(images)
+        images = [
+            preprocess(image, new_shape=(256, 256), channel_first=True, normalize=False)[0] # get image only
+            for image in images
+        ]
 
         result_spoofing = self.anti_spoofing.run(data=[images])
         result_softmax = softmax(result_spoofing['output'])
@@ -89,7 +88,10 @@ class FaceServiceV2(InterfaceService):
     
     def detect_face(self, images: List[np.ndarray]):
         # preprocess
-        preprocess_images = [self.preprocess(image) for image in images]
+        preprocess_images = [
+            preprocess(image, new_shape=(640, 640), channel_first=True, normalize=False)[0] # get image only
+            for image in images
+        ]
         input_images = np.array([image[0] for image in preprocess_images])
         ratios = np.array([image[1] for image in preprocess_images])
         dwdhs = np.array([image[2] for image in preprocess_images])
