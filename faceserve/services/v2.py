@@ -49,7 +49,13 @@ class FaceServiceV2(InterfaceService):
         """
         if isinstance(images, list):
             images = np.array(images)
-        emds = self.ghostfacenet.run([images]) # get face embedding
+
+        images = [
+            cv2.resize(np.swapaxes(image, 0, 2), (112, 112))
+            for image in images
+        ]
+        
+        emds = self.ghostfacenet.run([np.array(images)]) # get face embedding
         print("emds: ", emds)
         return emds
     
@@ -232,7 +238,7 @@ class FaceServiceV2(InterfaceService):
     def preprocess(self, 
         image: np.ndarray, 
         new_shape=(640, 640), 
-        color=(114, 114, 114), 
+        color=, 
         scaleup=True
     ) -> Tuple[np.ndarray, float, Tuple[float, float]]:
         """ Preprocessing function with reshape and normalize input
@@ -273,7 +279,9 @@ class FaceServiceV2(InterfaceService):
             
         top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
         left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-        image = cv2.copyMakeBorder(image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
+        image = cv2.copyMakeBorder(
+            image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114)
+        )  # add border
         
         image = image.transpose((2, 0, 1))
         image = np.ascontiguousarray(image, dtype=np.float32)
