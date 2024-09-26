@@ -7,7 +7,8 @@ from pathlib import Path
 from trism import TritonModel
 from faceserve.services.interface import InterfaceService
 from faceserve.db.interface import InterfaceDatabase
-from faceserve.utils import crop_image, align_5_points
+from faceserve.utils import crop_image, align_5_points, preprocess
+
 from faceserve.utils.save_crop import save_crop
 
 
@@ -36,6 +37,10 @@ class FaceServiceV2(InterfaceService):
         self.detection_thresh = detection_thresh
         self.recognition_thresh = recognition_thresh
 
+
+    
+    ### Core Modules
+    ###
 
     def get_face_emb(self, images, **kwargs):
         """
@@ -94,7 +99,79 @@ class FaceServiceV2(InterfaceService):
             outputs, ratios, dwdhs, det_thres=self.detection_thresh
         )
         return index_images, bboxes, kpts
+    
 
+    ### Base Modules
+    ### 
+
+    def postprocess(self, face_detect_batch, ratios, dwdhs, det_thres=0.5):
+        """Processing output model match output format
+
+        Args:
+            face_detect_batch (np.array): output of face detection model
+            ratios (float): ratio between original and new shape
+            dwdhs (tuple): padding follow by yolo processing
+            det_thres (float, optional): detection threshold. Defaults to 0.5.
+            
+        Returns:
+            Tuple: index_images, det_bboxes, det_scores, det_labels, kpts
+        """
+        # wrap numpy
+        if isinstance(face_detect_batch, list):
+            face_detect_batch = np.array(face_detect_batch)
+        # scale: x,y -> x,y,x,y
+        padding = np.concatenate([dwdhs, dwdhs], axis=1)
+        # get sample higher than threshold
+        pred = face_detect_batch[face_detect_batch[:, 6] > det_thres] 
+        # get index, bbox, score, label, ketpoint
+        index_images, det_bboxes, det_scores, det_labels  = pred[:, 0], pred[:,1:5], pred[:,6], pred[:, 5]
+        kpts = pred[:, 7:] if pred.shape[1] > 6 else None
+        # Filter, Normalize
+        det_bboxes -= np.array(padding)
+        det_bboxes /= np.array(ratios)        
+        if kpts is not None:
+            for i in range(len(kpts)):
+                kpts[i,0::3] = (kpts[i,0::3] - np.array(padding[i, 0])) / ratios[i]
+                kpts[i,1::3] = (kpts[i,1::3]- np.array(padding[i, 1])) / ratios[i]
+        # return
+        return index_images, det_bboxes, det_scores, det_labels, kpts
+
+    def crop_and_align_face(self, image, xyxys, kpts):
+        """Crop and align face from image"""
+        if isinstance(image, Image.Image):
+            image = np.array(image)
+        crops = []        
+        # dets are of different sizes so batch preprocessing is not possible
+        for box, kpt in zip(xyxys, kpts):
+            x1, y1, _, _ = box
+            crop = crop_image(image, box)
+            # Align face
+            # Scale the keypoints to the face size
+            kpt[::3] = kpt[::3] - x1
+            kpt[1::3] = kpt[1::3] - y1
+            # Crop face
+            crop = align_5_points(crop, kpt)
+            crop = cv2.resize(crop, (256, 256))
+            crop = (crop - 127.5) * 0.0078125
+            crop = crop.transpose(2, 0, 1)
+            crop = np.expand_dims(crop, axis=0)
+            crops.append(crop)
+        crops = np.concatenate(crops, axis=0)
+        return crops
+
+    def dict_to_csv(self, data: List[dict], group_id: str = 'default') -> None:
+        import csv
+
+        keys = ('image_id', 'person_id', 'group_id', 'file_crop')
+        with open(f'{group_id}.csv', 'w', newline='') as output_file:
+            dict_writer = csv.DictWriter(output_file, keys)
+            dict_writer.writeheader()
+            dict_writer.writerows(data)
+
+
+
+    ### Main Modules
+    ###
     def check_face(self, image: np.ndarray, thresh: float, group_id: str) -> dict:
         """Check face images
         """
@@ -154,18 +231,7 @@ class FaceServiceV2(InterfaceService):
             f"Face checking fail (No detection: {len(check_batch)}/1), please try again.",
         )
     
-    
-    def dict_to_csv(self, data: List[dict], group_id: str = 'default') -> None:
-        import csv
 
-        keys = ('image_id', 'person_id', 'group_id', 'file_crop')
-        with open(f'{group_id}.csv', 'w', newline='') as output_file:
-            dict_writer = csv.DictWriter(output_file, keys)
-            dict_writer.writeheader()
-            dict_writer.writerows(data)
-
-        
-        
 
     def register_face(self, images: List[np.ndarray], person_id: str, group_id: str, face_folder: Path) -> dict:
         """
@@ -210,115 +276,3 @@ class FaceServiceV2(InterfaceService):
         return {
             "message": "Register face successfully",
         } 
-
-    
-    def crop_and_align_face(self, image, xyxys, kpts):
-        """Crop and align face from image"""
-        if isinstance(image, Image.Image):
-            image = np.array(image)
-        crops = []        
-        # dets are of different sizes so batch preprocessing is not possible
-        for box, kpt in zip(xyxys, kpts):
-            x1, y1, _, _ = box
-            crop = crop_image(image, box)
-            # Align face
-            # Scale the keypoints to the face size
-            kpt[::3] = kpt[::3] - x1
-            kpt[1::3] = kpt[1::3] - y1
-            # Crop face
-            crop = align_5_points(crop, kpt)
-            crop = cv2.resize(crop, (256, 256))
-            crop = (crop - 127.5) * 0.0078125
-            crop = crop.transpose(2, 0, 1)
-            crop = np.expand_dims(crop, axis=0)
-            crops.append(crop)
-        crops = np.concatenate(crops, axis=0)
-        return crops
-
-    def preprocess(self, 
-        image: np.ndarray, 
-        new_shape=(640, 640), 
-        color=, 
-        scaleup=True
-    ) -> Tuple[np.ndarray, float, Tuple[float, float]]:
-        """ Preprocessing function with reshape and normalize input
-
-        Args:
-            im (np.array, optional): input image
-            new_shape (tuple, optional): new shape to resize. Defaults to (640, 640).
-            color (tuple, optional): _description_. Defaults to (114, 114, 114).
-            scaleup (bool, optional): resize small to large input size. Defaults to True.
-
-        Returns:
-            im: image after normalize and resize
-            r: scale ratio between original and new shape 
-            dw, dh: padding follow by yolo processing
-        """
-        # Resize and pad image while meeting stride-multiple constraints
-        if isinstance(image, Image.Image):
-            image = np.array(image)
-        shape = image.shape[:2]  # current shape [height, width]
-        
-        if isinstance(new_shape, int):
-            new_shape = (new_shape, new_shape)
-
-        # Scale ratio (new / old)
-        r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
-        if not scaleup:  # only scale down, do not scale up (for better val mAP)
-            r = min(r, 1.0)
-
-        # Compute padding
-        new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))
-        dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]  # wh padding
-
-        dw /= 2  # divide padding into 2 sides
-        dh /= 2
-
-        if shape[::-1] != new_unpad:  # resize
-            image = cv2.resize(image, new_unpad, interpolation=cv2.INTER_LINEAR)
-            
-        top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
-        left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-        image = cv2.copyMakeBorder(
-            image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114)
-        )  # add border
-        
-        image = image.transpose((2, 0, 1))
-        image = np.ascontiguousarray(image, dtype=np.float32)
-        image /= 255
-        
-        return image, r, (dw, dh)
-
-    def postprocess(self, face_detect_batch, ratios, dwdhs, det_thres=0.5):
-        """Processing output model match output format
-
-        Args:
-            face_detect_batch (np.array): output of face detection model
-            ratios (float): ratio between original and new shape
-            dwdhs (tuple): padding follow by yolo processing
-            det_thres (float, optional): detection threshold. Defaults to 0.5.
-            
-        Returns:
-            Tuple: index_images, det_bboxes, det_scores, det_labels, kpts
-        """
-        # wrap numpy
-        if isinstance(face_detect_batch, list):
-            face_detect_batch = np.array(face_detect_batch)
-        # scale: x,y -> x,y,x,y
-        padding = np.concatenate([dwdhs, dwdhs], axis=1)
-        # get sample higher than threshold
-        pred = face_detect_batch[face_detect_batch[:, 6] > det_thres] 
-        # get index, bbox, score, label, ketpoint
-        index_images, det_bboxes, det_scores, det_labels  = pred[:, 0], pred[:,1:5], pred[:,6], pred[:, 5]
-        kpts = pred[:, 7:] if pred.shape[1] > 6 else None
-        # Filter, Normalize
-        det_bboxes -= np.array(padding)
-        det_bboxes /= np.array(ratios)        
-        if kpts is not None:
-            for i in range(len(kpts)):
-                kpts[i,0::3] = (kpts[i,0::3] - np.array(padding[i, 0])) / ratios[i]
-                kpts[i,1::3] = (kpts[i,1::3]- np.array(padding[i, 1])) / ratios[i]
-        # return
-        return index_images, det_bboxes, det_scores, det_labels, kpts
-        
-
