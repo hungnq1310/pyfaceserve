@@ -53,15 +53,15 @@ class FaceServiceV2(InterfaceService):
         print("emds: ", emds)
         return emds
     
-    def validate_face(self, images: List[Image.Image]):
+    def validate_face(self, images: List[np.ndarray]):
         # TODO:
-        # preprocess image with  shape (256, 256)
-        ...
         # 1. get temp emb of each face -> List of List
         embeddings, valid_imgs, temp = [], [], self.get_face_emb(images=images)
-        
+        temp = temp['embedding']
         # 2. Check if face is valid by using spoofing model
-        result_spoofing = self.anti_spoofing.run(data=[temp])
+        images = np.array(images)
+
+        result_spoofing = self.anti_spoofing.run(data=[images])
         result_softmax = softmax(result_spoofing['output'])
 
         for i in range(len(temp)):
@@ -181,7 +181,7 @@ class FaceServiceV2(InterfaceService):
         assert len(kpts) == len(images), 'Number of batch keypoints and batch images are not the same'
         batch_crops = []
         for i, image in enumerate(images):
-            crops_per_image = self.crop_and_align_face(image, bboxes[i], kpts[i])
+            crops_per_image = self.crop_and_align_face(image, bboxes, kpts)
             batch_crops.extend(crops_per_image)
         # 3. get valid face -> List of List
         embeddings, valid_crops = self.validate_face(batch_crops)
@@ -192,8 +192,9 @@ class FaceServiceV2(InterfaceService):
                 f"Your face images is not valid, only {len(valid_crops)}/{len(images)} accepted images, please try again.",
             )
         # 5. save face embedding to local
+        #? valide crops is 16 for 4 images
         for i, crop in enumerate(valid_crops):
-            cv2.imwrite(str(face_folder / f"{group_id}_{person_id}_{i}.jpg"), crop)
+            cv2.imwrite(str(face_folder / f"{group_id}_{person_id}_{i}.jpg"), crop.transpose(1, 2, 0))
         # 6. save face embedding to database
         self.facedb.insert_faces(
             face_embs=embeddings,
@@ -206,6 +207,9 @@ class FaceServiceV2(InterfaceService):
 
     
     def crop_and_align_face(self, image, xyxys, kpts):
+        """Crop and align face from image"""
+        if isinstance(image, Image.Image):
+            image = np.array(image)
         crops = []        
         # dets are of different sizes so batch preprocessing is not possible
         for box, kpt in zip(xyxys, kpts):
@@ -217,7 +221,7 @@ class FaceServiceV2(InterfaceService):
             kpt[1::3] = kpt[1::3] - y1
             # Crop face
             crop = align_5_points(crop, kpt)
-            crop = cv2.resize(crop, self.model_input_size)
+            crop = cv2.resize(crop, (256, 256))
             crop = (crop - 127.5) * 0.0078125
             crop = crop.transpose(2, 0, 1)
             crop = np.expand_dims(crop, axis=0)
@@ -303,8 +307,9 @@ class FaceServiceV2(InterfaceService):
         det_bboxes -= np.array(padding)
         det_bboxes /= np.array(ratios)        
         if kpts is not None:
-            kpts[:,0::3] = (kpts[:,0::3] - np.array(padding[:, 0])) / ratios
-            kpts[:,1::3] = (kpts[:,1::3]- np.array(padding[:, 1])) / ratios
+            for i in range(len(kpts)):
+                kpts[i,0::3] = (kpts[i,0::3] - np.array(padding[i, 0])) / ratios[i]
+                kpts[i,1::3] = (kpts[i,1::3]- np.array(padding[i, 1])) / ratios[i]
         # return
         return index_images, det_bboxes, det_scores, det_labels, kpts
         
