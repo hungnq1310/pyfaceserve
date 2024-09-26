@@ -42,7 +42,7 @@ class FaceServiceV2(InterfaceService):
     ### Core Modules
     ###
 
-    def get_face_emb(self, images: List[np.ndarray]) -> Any:
+    def get_face_emb(self, images: List[Image.Image]) -> Any:
         """
         Get face embedding from face image
         
@@ -60,7 +60,7 @@ class FaceServiceV2(InterfaceService):
         print("emds: ", emds)
         return emds
     
-    def validate_face(self, images: List[np.ndarray]):
+    def validate_face(self, images: List[Image.Image]):
         # TODO:
         # 1. get temp emb of each face -> List of List
         embeddings, valid_imgs, temp = [], [], self.get_face_emb(images=images)
@@ -86,7 +86,7 @@ class FaceServiceV2(InterfaceService):
         # get temp result
         return embeddings, valid_imgs
     
-    def detect_face(self, images: List[np.ndarray]):
+    def detect_face(self, images: List[Image.Image]):
         # preprocess
         preprocess_images = [
             preprocess(image, new_shape=(640, 640), channel_first=True, normalize=False)[0] # get image only
@@ -153,12 +153,7 @@ class FaceServiceV2(InterfaceService):
             kpt[1::3] = kpt[1::3] - y1
             # Crop face
             crop = align_5_points(crop, kpt)
-            crop = cv2.resize(crop, (256, 256))
-            crop = (crop - 127.5) * 0.0078125
-            crop = crop.transpose(2, 0, 1)
-            crop = np.expand_dims(crop, axis=0)
             crops.append(crop)
-        crops = np.concatenate(crops, axis=0)
         return crops
 
     def dict_to_csv(self, data: List[dict], group_id: str = 'default') -> None:
@@ -174,7 +169,7 @@ class FaceServiceV2(InterfaceService):
 
     ### Main Modules
     ###
-    def check_face(self, image: np.ndarray, thresh: float, group_id: str) -> dict:
+    def check_face(self, image: Image.Image, thresh: float, group_id: str) -> dict:
         """Check face images
         """
         # 1. detect faces in each image -> List of List
@@ -184,12 +179,6 @@ class FaceServiceV2(InterfaceService):
         crops = self.crop_and_align_face(image, batch_bboxes, batch_kpts)
         # 3. get valid face -> List of List
         embeddings, valid_crops = self.validate_face(crops)
-
-        # 4. Filter invalid face
-        for j, crop in enumerate(crops):
-            if embeddings[j] is None:
-                embeddings.remove(embeddings[j])
-                valid_crops.remove(valid_crops[j])
 
         # 5. save crop to folder
         file_crop_paths = save_crop(
@@ -235,12 +224,12 @@ class FaceServiceV2(InterfaceService):
     
 
 
-    def register_face(self, images: List[np.ndarray], person_id: str, group_id: str, face_folder: Path) -> dict:
+    def register_face(self, images: List[Image.Image], person_id: str, group_id: str, face_folder: Path) -> dict:
         """
         Register face images
 
         Args:
-            images (List[np.ndarray]): face images
+            images (List[Image.Image]): face images
             person_id (str): person id
             group_id (str): group id
             face_folder (Path): face folder
@@ -268,7 +257,7 @@ class FaceServiceV2(InterfaceService):
         # 5. save face embedding to local
         #? valide crops is 16 for 4 images
         for i, crop in enumerate(valid_crops):
-            cv2.imwrite(str(face_folder / f"{group_id}_{person_id}_{i}.jpg"), crop.transpose(1, 2, 0))
+            cv2.imwrite(str(face_folder / f"{group_id}_{person_id}_{i}.jpg"), crop)
         # 6. save face embedding to database
         self.facedb.insert_faces(
             face_embs=embeddings,
