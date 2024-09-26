@@ -53,7 +53,7 @@ class FaceServiceV2(InterfaceService):
             Tuple[Any, Any]: face bounding boxes, face embeddings
         """
         images = [
-            preprocess(image, new_shape=(112, 112), channel_first=False, normalize=False)[0] # get image only
+            preprocess(image, new_shape=(112, 112), channel_first=False, normalize=True)[0] # get image only
             for image in images
         ]
         emds = self.ghostfacenet.run([np.array(images)]) # get face embedding
@@ -66,10 +66,10 @@ class FaceServiceV2(InterfaceService):
         embeddings, valid_imgs, temp = [], [], self.get_face_emb(images=images)
         temp = temp['embedding']
         # 2. Check if face is valid by using spoofing model
-        images = [
-            preprocess(image, new_shape=(256, 256), channel_first=True, normalize=False)[0] # get image only
+        images = np.array([
+            preprocess(image, new_shape=(256, 256), channel_first=True, normalize=True)[0] # get image only
             for image in images
-        ]
+        ])
 
         result_spoofing = self.anti_spoofing.run(data=[images])
         result_softmax = softmax(result_spoofing['output'])
@@ -89,7 +89,7 @@ class FaceServiceV2(InterfaceService):
     def detect_face(self, images: List[Image.Image]):
         # preprocess
         preprocess_images = [
-            preprocess(image, new_shape=(640, 640), channel_first=True, normalize=False)[0] # get image only
+            preprocess(image, new_shape=(640, 640), channel_first=True, normalize=True)
             for image in images
         ]
         input_images = np.array([image[0] for image in preprocess_images])
@@ -129,12 +129,13 @@ class FaceServiceV2(InterfaceService):
         index_images, det_bboxes, det_scores, det_labels  = pred[:, 0], pred[:,1:5], pred[:,6], pred[:, 5]
         kpts = pred[:, 7:] if pred.shape[1] > 6 else None
         # Filter, Normalize
-        det_bboxes -= np.array(padding)
-        det_bboxes /= np.array(ratios)        
+        for i in range(len(det_bboxes)):
+            det_bboxes[i] -= padding[i]
+            det_bboxes[i] /= ratios[i]    
         if kpts is not None:
             for i in range(len(kpts)):
-                kpts[i,0::3] = (kpts[i,0::3] - np.array(padding[i, 0])) / ratios[i]
-                kpts[i,1::3] = (kpts[i,1::3]- np.array(padding[i, 1])) / ratios[i]
+                kpts[i,0::3] = (kpts[i,0::3] - padding[i, 0]) / ratios[i]
+                kpts[i,1::3] = (kpts[i,1::3]- padding[i, 1]) / ratios[i]
         # return
         return index_images, det_bboxes, det_scores, det_labels, kpts
 
@@ -145,12 +146,8 @@ class FaceServiceV2(InterfaceService):
         crops = []        
         # dets are of different sizes so batch preprocessing is not possible
         for box, kpt in zip(xyxys, kpts):
-            x1, y1, _, _ = box
             crop = crop_image(image, box)
             # Align face
-            # Scale the keypoints to the face size
-            kpt[::3] = kpt[::3] - x1
-            kpt[1::3] = kpt[1::3] - y1
             # Crop face
             crop = align_5_points(crop, kpt)
             crops.append(crop)
@@ -244,7 +241,7 @@ class FaceServiceV2(InterfaceService):
         assert len(kpts) == len(images), 'Number of batch keypoints and batch images are not the same'
         batch_crops = []
         for i, image in enumerate(images):
-            crops_per_image = self.crop_and_align_face(image, bboxes, kpts)
+            crops_per_image = self.crop_and_align_face(image, [bboxes[i]], [kpts[i]])
             batch_crops.extend(crops_per_image)
         # 3. get valid face -> List of List
         embeddings, valid_crops = self.validate_face(batch_crops)
