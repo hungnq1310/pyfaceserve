@@ -73,39 +73,60 @@ class QdrantFaceDatabase(InterfaceDatabase):
 
     def delete_face(self, face_id: str, person_id: str, group_id: str):
         '''Delete a face of a given person's id or group's id in collection'''
-        assert person_id is not None and group_id is not None, "person_id and group_id cannot be None at the same time"
-        if group_id is not None:
-            self._client.delete(
-                collection_name=self.collection_name,
-                points_selector=models.FilterSelector(filter=models.Filter(
-                    must=[
-                        models.FieldCondition(
-                            key="group_id",
-                            match=models.MatchValue(value=f"{group_id}"),
-                        ),
-                    ])
-                ),
-            )
-        elif person_id is not None:
-            self._client.delete(
-                collection_name=self.collection_name,
-                points_selector=models.FilterSelector(filter=models.Filter(
-                    must=[
-                        models.FieldCondition(
-                            key="person_id",
-                            match=models.MatchValue(value=f"{person_id}"),
-                        ),
-                    ])
-                ),
-            )
-        else:
-            self._client.delete(
-                collection_name=self.collection_name, 
-                points_selector=models.PointIdsList(
-                    points=[face_id]
+        if group_id is None:
+            if face_id is not None:
+                self._client.delete(
+                    collection_name=self.collection_name,
+                    points_selector=models.PointIdsList(
+                        points=[face_id],
+                    ),
                 )
-            )
-
+            elif person_id is not None:
+                self._client.delete(
+                    collection_name=self.collection_name,
+                    points_selector=models.FilterSelector(filter=models.Filter(
+                        must=[
+                            models.FieldCondition(
+                                key="person_id",
+                                match=models.MatchValue(value=f"{person_id}"),
+                            ),
+                        ])
+                    ),
+                )
+            else:
+                print('No face id, person id or group id found')
+        elif group_id is not None:
+            if person_id is not None:
+                self._client.delete(
+                    collection_name=self.collection_name,
+                    points_selector=models.FilterSelector(filter=models.Filter(
+                        must=[
+                            models.FieldCondition(
+                                key="group_id",
+                                match=models.MatchValue(value=f"{group_id}"),
+                            ),
+                            models.FieldCondition(
+                                key="person_id",
+                                match=models.MatchValue(value=f"{person_id}"),
+                            ),
+                        ])
+                    ),
+                )
+            else:
+                self._client.delete(
+                    collection_name=self.collection_name,
+                    points_selector=models.FilterSelector(filter=models.Filter(
+                        must=[
+                            models.FieldCondition(
+                                key="group_id",
+                                match=models.MatchValue(value=f"{group_id}"),
+                            ),
+                        ])
+                    ),
+                )
+        else:
+            print('No face id, person id or group id found')
+            
     def list_faces(self, person_id: str, group_id: str):
         '''List all faces of a given person's id or group's id in collection'''
         if person_id is not None and group_id is not None:
