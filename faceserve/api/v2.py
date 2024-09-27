@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
 from fastapi import APIRouter, HTTPException, status, Request, File, UploadFile
+from fastapi.responses import JSONResponse
 from faceserve.services.v2 import FaceServiceV2
 from faceserve.db.qdrant import QdrantFaceDatabase
 from faceserve.schema.face_request import FaceRequest
@@ -57,20 +58,22 @@ router = APIRouter(prefix="/v1")
 async def register(id: str, request: FaceRequest, groups_id: str = "default"):
     images = [base64.b64decode(x) for x in request.base64images]
     images = [Image.open(BytesIO(x)) for x in images]
-    hash_imgs = service.register_face(
+    hashes_path = service.register_face(
         images=images, id=id, group_id=groups_id, face_folder=FACES_IMG_DIR
     )
-    return [f"/imgs/{groups_id}/{id}/{x}.jpg" for x in hash_imgs]
+    return JSONResponse(
+        content=hashes_path, status_code=status.HTTP_200_OK
+    )
 
-
-@router.post("/register/faces")
+@router.post("/register/files")
 async def register_upload(files: list[UploadFile], id: str, group_id: str = "default"):
     images = [Image.open(BytesIO(await x.read())).convert("RGB") for x in files]
-    hash_imgs = service.register_face(
+    hashes_path = service.register_face(
         images=images, person_id=id, group_id=group_id, face_folder=FACES_IMG_DIR
     )
-    return [f"/imgs/{group_id}/{id}/{x}.jpg" for x in hash_imgs]
-
+    return JSONResponse(
+        content=hashes_path, status_code=status.HTTP_200_OK
+    )
 
 @router.get("/faces")
 async def get_face_image(id: str|None = None, group_id: str|None = None):
@@ -95,24 +98,29 @@ async def delete_face(face_id: str|None = None, id: str|None = None, group_id: s
         group_id=group_id
     )
 
-
 @router.post("/check/face")
 async def check_face_images(request: FaceRequest, id: str|None = None, group_id: str|None = None):
     images = [base64.b64decode(x) for x in request.base64images]
     images = [Image.open(BytesIO(x)) for x in images]
-    return service.check_face(
-        images=images, 
+    return [service.check_face(
+        image=img, 
         thresh=RECOGNITION_THRESH, 
         person_id=id, 
-        group_id=group_id
-    )
+        group_id=group_id,
+        save_dir=FACES_IMG_DIR,
+    ) for img in images]
 
-@router.post("/check/faces")
-async def check_faces(request: FaceRequest, id: str|None = None, group_id: str = 'default'):
-    images = [base64.b64decode(x) for x in request.base64images]
-    images = [Image.open(BytesIO(x)) for x in images]
-    return service.check_faces(
-        images=images, 
-        thresh=RECOGNITION_THRESH,
-        group_id=group_id
-    )
+@router.post("/check/face/files")
+async def check_face_images(
+    files: list[UploadFile], 
+    id: str|None = None, 
+    group_id: str|None = None
+):
+    images = [Image.open(BytesIO(await x.read())).convert("RGB") for x in files]
+    return [service.check_face(
+        image=img, 
+        thresh=RECOGNITION_THRESH, 
+        person_id=id, 
+        group_id=group_id,
+        save_dir=FACES_IMG_DIR,
+    ) for img in images]
