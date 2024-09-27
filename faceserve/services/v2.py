@@ -89,9 +89,6 @@ class FaceServiceV2(InterfaceService):
             if result_softmax[i] > self.spoofing_thresh:
                 embeddings.append(temp[i])
                 valid_imgs.append(images[i])
-            else:
-                embeddings.append(None)
-                valid_imgs.append(None)
 
         # return
         return embeddings, valid_imgs
@@ -272,11 +269,14 @@ class FaceServiceV2(InterfaceService):
         Returns:
             dict: message
         """
-        # 1. detect faces in each image -> List of List
+        # 1. detect faces in each image
         _, bboxes, kpts = self.detect_face(images=images)
+        if len(bboxes) != len(images) or len(kpts) != len(images):
+            #! number detections of all image compare with list bboxes -> ensure one person in one image
+            return {
+                "message": f"Number of batch bboxes, keypoints and batch images are not the same"  
+            }
         # 2. crop and align face -> List of List
-        assert len(bboxes) == len(images), 'Number of batch bboxes and batch images are not the same'
-        assert len(kpts) == len(images), 'Number of batch keypoints and batch images are not the same'
         batch_crops = []
         for i, image in enumerate(images):
             crops_per_image = self.crop_and_align_face(image, [bboxes[i]], [kpts[i]])
@@ -284,6 +284,7 @@ class FaceServiceV2(InterfaceService):
         # 3. get valid face -> List of List
         embeddings, valid_crops = self.validate_face(batch_crops)
         embeddings = [x.tolist() for x in embeddings]
+
         # 4. save crop to folder
         if len(valid_crops) < len(images) / 2:
             return {
@@ -292,13 +293,11 @@ class FaceServiceV2(InterfaceService):
         # 5. save and hash face embedding to local
         hashes, crop_save_paths = [], []
         for i, crop in enumerate(valid_crops):
+            crop_save_path = f"{face_folder}/{group_id}_{person_id}_{i}.jpg"
             # some preprocess
             if crop.shape[0] == 3:
                 crop = np.transpose(crop, (1, 2, 0)) 
-            crop *= 255
-            crop = crop.astype(np.uint8)
-            crop_pil = Image.fromarray(crop)
-            crop_save_path = str(face_folder / f"{group_id}_{person_id}_{i}.jpg")
+            crop_pil = Image.fromarray((crop*255).astype(np.uint8))
             crop_pil.save(crop_save_path)
             # stuff
             hashes.append(hashlib.md5(crop_pil.tobytes()).hexdigest())
