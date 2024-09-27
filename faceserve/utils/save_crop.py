@@ -134,6 +134,7 @@ def save_crop(bboxes, path, img, save_dir, names):
     file_crop_paths = []
     img = np.array(img)
     p = Path(path)  # to Path
+    save_dir = Path(save_dir)  # to Path
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # BGR to RGB1
     # Write results
     for det_index, xyxy in enumerate(bboxes):
@@ -141,6 +142,6 @@ def save_crop(bboxes, path, img, save_dir, names):
         plot_one_box(xyxy, img, label=label, color=colors(0, True), line_thickness=3, orig_shape=img.shape[:2])
         filename_crop = save_one_box(xyxy, img, file=save_dir / 'crops' / f'{p.stem}.jpg', BGR=True)
         file_crop_paths.append(filename_crop)
-    save_path = str(save_dir / p.stem) + ".jpg"  # img.jpg
+    save_path = str(save_dir / 'raw' / p.stem) + ".jpg"  # img.jpg
     cv2.imwrite(save_path, img)
     return file_crop_paths
