@@ -111,7 +111,13 @@ class FaceServiceV2(InterfaceService):
     ### Base Modules
     ### 
 
-    def postprocess(self, face_detect_batch, ratios, dwdhs, det_thres=0.5):
+    def postprocess(
+        self, 
+        face_detect_batch: np.ndarray | List[np.ndarray], 
+        ratios: np.ndarray | List[np.ndarray], 
+        dwdhs: np.ndarray | List[np.ndarray], 
+        det_thres: float = 0.5
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Processing output model match output format
 
         Args:
@@ -145,22 +151,26 @@ class FaceServiceV2(InterfaceService):
         # return
         return index_images, det_bboxes, det_scores, det_labels, kpts
 
-    def crop_and_align_face(self, image, xyxys, kpts):
+    def crop_and_align_face(
+        self, 
+        image: Image.Image | np.ndarray, 
+        xyxys: List[List[float] | np.ndarray], 
+        kpts: List[List[float] | np.ndarray],
+    ) -> List[np.ndarray]:
         """Crop and align face from image"""
         if isinstance(image, Image.Image):
             image = np.array(image)
         crops = []        
-        # dets are of different sizes so batch preprocessing is not possible
         for kpt in kpts:
+            # wrap kpt from [1, 15] -> [[1, 2], [3, 4], ...]
+            kpt_wrap = [[kpt[i], kpt[i+1]] for i in range(0, len(kpt), 3)]
             # Align face
-            kpt_wrap = np.array([[kpt[i], kpt[i+1]] for i in range(0, len(kpt), 3)])
             image_align = face_align_landmarks_sk(image, kpt_wrap)
-            # DEBUG:
-            Image.fromarray(image_align).save('debug4.jpg')
             crops.append(image_align)
         return crops
 
     def dict_to_csv(self, data: List[dict], group_id: str = 'default') -> None:
+        """Convert dict_checked (final result) to csv file"""
         import csv
 
         keys = ('image_id', 'person_id', 'group_id', 'file_crop')
@@ -168,7 +178,7 @@ class FaceServiceV2(InterfaceService):
             dict_writer = csv.DictWriter(output_file, keys)
             dict_writer.writeheader()
             dict_writer.writerows(data)
-
+        return None
 
 
     ### Main Modules
