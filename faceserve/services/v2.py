@@ -11,10 +11,6 @@ from faceserve.utils import crop_image, face_align_landmarks_sk, preprocess
 
 from faceserve.utils.save_crop import save_crop
 
-
-
-from fastapi import HTTPException, status
-
 def softmax(x):
     return 1 / np.sum(np.exp(x))
 
@@ -183,35 +179,35 @@ class FaceServiceV2(InterfaceService):
 
     ### Main Modules
     ###
-    def check_face(self, image: Image.Image, thresh: float, group_id: str, person_id: str) -> dict:
+    def check_face(
+        self, 
+        image: Image.Image, 
+        thresh: None | float = 0.5, 
+        group_id: None | str = 'default', 
+        person_id: None | str = '0',
+        save_dir: None | str = 'temp',
+    ) -> dict:
         """Check face images
         """
         # 1. detect faces in each image -> List of List
         _, batch_bboxes, batch_kpts = self.detect_face(images=[image])
-
         # 2. crop and align face -> List of List
         crops = self.crop_and_align_face(image, batch_bboxes, batch_kpts)
         # 3. get valid face -> List of List
         embeddings, valid_crops = self.validate_face(crops)
 
-        # 5. save crop to folder
+        # 4. save crop to folder
         file_crop_paths = save_crop(
             bboxes=batch_bboxes, 
-            path=f"{group_id}_image_{person_id}_", 
+            path=f"{group_id}_image_{person_id}_", #* name of saved image
             img=image, #* this is the original image 
-            save_dir=Path("temp"), 
+            save_dir=save_dir, 
             names=['face']
-        )               
+        )
 
-        # check face
-        check_batch = []
-        for x in embeddings:
-            y = self.facedb.check_face(x, thresh)
-            check_batch.append(y)
-        print(check_batch)
-
-        #TODO: turn check_batch into dict_checked
+        # 5. check face
         dict_checked = []
+        check_batch = [self.facedb.check_face(x, thresh) for x in embeddings]
         for i in range(len(check_batch)):
             if len(check_batch[i]) == 0:
                 continue
@@ -222,24 +218,27 @@ class FaceServiceV2(InterfaceService):
                     "group_id": point.payload['group_id'],
                     'file_crop': file_crop_paths[i]
                 })
-        # extract to csv
+        # 6. extract to csv
         self.dict_to_csv(dict_checked, group_id)
 
         # N images - M faces
         if len(valid_crops) > 1:
-            return {"check_group": dict_checked}
+            return {"check_group": dict_checked, "num_detections": len(batch_bboxes)}
         # N images - N faces
         elif len(valid_crops) == 1:
             return {"check_per_person": dict_checked, "num_detections": len(batch_bboxes)}
         
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            f"Face checking fail (No detection: {len(check_batch)}/1), please try again.",
-        )
-    
+        return {
+            "message": "Face checking fail (No detection), please try again."
+        }
 
-
-    def register_face(self, images: List[Image.Image], person_id: str, group_id: str, face_folder: Path) -> dict:
+    def register_face(
+        self, 
+        images: List[Image.Image], 
+        person_id: None | str = "0", 
+        group_id: None | str = "default", 
+        face_folder: None | str = "temp",
+    ) -> dict:
         """
         Register face images
 
@@ -263,29 +262,32 @@ class FaceServiceV2(InterfaceService):
             batch_crops.extend(crops_per_image)
         # 3. get valid face -> List of List
         embeddings, valid_crops = self.validate_face(batch_crops)
+        embeddings = [x.tolist() for x in embeddings]
         # 4. save crop to folder
         if len(valid_crops) < len(images) / 2:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN,
-                f"Your face images is not valid, only {len(valid_crops)}/{len(images)} accepted images, please try again.",
-            )
+            return {
+                "message": f"Your face images is not valid, only {len(valid_crops)}/{len(images)} accepted images, please try again.",
+            }
         # 5. save and hash face embedding to local
-        hashes = []
+        hashes, crop_save_paths = [], []
         for i, crop in enumerate(valid_crops):
+            # some preprocess
             if crop.shape[0] == 3:
                 crop = np.transpose(crop, (1, 2, 0)) 
             crop *= 255
             crop = crop.astype(np.uint8)
             crop_pil = Image.fromarray(crop)
+            crop_save_path = str(face_folder / f"{group_id}_{person_id}_{i}.jpg")
+            crop_pil.save(crop_save_path)
+            # stuff
             hashes.append(hashlib.md5(crop_pil.tobytes()).hexdigest())
-            crop_pil.save(str(face_folder / f"{group_id}_{person_id}_{i}.jpg"))
+            crop_save_paths.append(crop_save_path)
         # 6. save face embedding to database
-        embeddings = [x.tolist() for x in embeddings]
         self.facedb.insert_faces(
             face_embs=zip(hashes, embeddings),
             group_id=group_id,
             person_id=person_id
         )
         return {
-            "message": "Register face successfully",
+            f"{key}": f"{crop_save_path}" for key, crop_save_path in zip(hashes, crop_save_paths)
         } 
