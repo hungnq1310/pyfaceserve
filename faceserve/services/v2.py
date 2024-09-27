@@ -172,7 +172,7 @@ class FaceServiceV2(InterfaceService):
 
     ### Main Modules
     ###
-    def check_face(self, image: Image.Image, thresh: float, group_id: str) -> dict:
+    def check_face(self, image: Image.Image, thresh: float, group_id: str, person_id: str) -> dict:
         """Check face images
         """
         # 1. detect faces in each image -> List of List
@@ -186,14 +186,17 @@ class FaceServiceV2(InterfaceService):
         # 5. save crop to folder
         file_crop_paths = save_crop(
             bboxes=batch_bboxes, 
-            path=f"{group_id}_image_{i}_", 
+            path=f"{group_id}_image_{person_id}_", 
             img=image, #* this is the original image 
             save_dir=Path("temp"), 
             names=['face']
         )               
 
         # check face
-        check_batch = [self.facedb.check_face(x, thresh) for x in embeddings]
+        check_batch = []
+        for x in embeddings:
+            y = self.facedb.check_face(x, thresh)
+            check_batch.append(y)
         print(check_batch)
 
         #TODO: turn check_batch into dict_checked
@@ -201,13 +204,11 @@ class FaceServiceV2(InterfaceService):
         for i in range(len(check_batch)):
             if len(check_batch[i]) == 0:
                 continue
-            for j in range(len(check_batch[i])):
-                if len(check_batch[i][j]) == 0:
-                    continue
+            for point in check_batch[i]:
                 dict_checked.append({
-                    "image_id": check_batch[i][0].id,
-                    "person_id": check_batch[i][0].payload['person_id'],
-                    "group_id": check_batch[i][0].payload['group_id'],
+                    "image_id": point.id,
+                    "person_id": point.payload['person_id'],
+                    "group_id": point.payload['group_id'],
                     'file_crop': file_crop_paths[i]
                 })
         # extract to csv
