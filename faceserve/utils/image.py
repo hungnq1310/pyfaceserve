@@ -30,7 +30,7 @@ def from_base64(base64str: str) -> Image.Image:
 def preprocess( 
         image: Image.Image, 
         new_shape=(640, 640), 
-        channel_first=True,
+        is_channel_first=True,
         normalize=True,
         scaleup=True
     ) -> Tuple[np.ndarray, float, Tuple[float, float]]:
@@ -48,9 +48,7 @@ def preprocess(
             dw, dh: padding follow by yolo processing
         """
         # I. Wrap image
-        if isinstance(image, Image.Image):
-            image = np.array(image)
-
+        image = np.array(image, dtype=np.float32)
         # Resize and pad image while meeting stride-multiple constraints
         shape = image.shape[:2]  # current shape [height, width]
         
@@ -70,7 +68,7 @@ def preprocess(
         dh /= 2
 
         if shape[::-1] != new_unpad:  # resize
-            image = cv2.resize(image, new_unpad, interpolation=cv2.INTER_LINEAR)
+            image = cv2.resize(image, new_unpad, interpolation=cv2.INTER_NEAREST)
         
         # add border
         top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
@@ -80,7 +78,7 @@ def preprocess(
         )  
         
         # II. Channel first
-        if channel_first:
+        if is_channel_first:
             if image.shape[0] == 3:
                 print('Image has already been in channel first format')
                 pass
@@ -95,7 +93,7 @@ def preprocess(
             if image.max() < 1 and image.min() >= 0:
                 print('Image has already been normalized')
                 pass
-            image /= 255
+            image /= 255.0
             print('Normalizing image')
         
         # IV. Return image, scale ratio, padding
