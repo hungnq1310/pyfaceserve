@@ -43,7 +43,9 @@ class FaceServiceV2(InterfaceService):
     ### Core Modules
     ###
 
-    def get_face_emb(self, images: List[Image.Image]) -> Any:
+    def get_face_emb(
+        self, images: List[Image.Image | np.ndarray]
+    ) -> np.ndarray:
         """
         Get face embedding from face image
         
@@ -54,27 +56,35 @@ class FaceServiceV2(InterfaceService):
             Tuple[Any, Any]: face bounding boxes, face embeddings
         """
         images = [
-            preprocess(image, new_shape=(112, 112), channel_first=False, normalize=True)[0] # get image only
-            for image in images
+            preprocess(image, new_shape=(112, 112), is_channel_first=False, normalize=True)[0] # get image only
+            for image in images #* images are crops
         ]
         emds = self.ghostfacenet.run([np.array(images)]) # get face embedding
-        print("emds: ", emds)
-        return emds
+        return emds['embedding']
     
-    def validate_face(self, images: List[Image.Image]):
-        # TODO:
+    def validate_face(
+        self, images: List[Image.Image | np.ndarray]
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Validate face images
+        
+        Args:
+            images (List[Image.Image | np.ndarray]): list of images
+            
+        Returns:
+            Tuple: embeddings, valid_imgs
+        """
         # 1. get temp emb of each face -> List of List
-        embeddings, valid_imgs, temp = [], [], self.get_face_emb(images=images)
-        temp = temp['embedding']
+        embeddings, valid_imgs, temp = [], [], self.get_face_emb(images=images) #* images are crops
         # 2. Check if face is valid by using spoofing model
         images = np.array([
-            preprocess(image, new_shape=(256, 256), channel_first=True, normalize=True)[0] # get image only
+            preprocess(image, new_shape=(256, 256), is_channel_first=True, normalize=True)[0] # get image only
             for image in images
         ])
-
+        # 3. Call APi
         result_spoofing = self.anti_spoofing.run(data=[images])
         result_softmax = sigmoid(result_spoofing['output'])
-
+        # 4. Filter valid face
         for i in range(len(temp)):
             if result_softmax[i] > self.spoofing_thresh:
                 embeddings.append(temp[i])
@@ -83,21 +93,32 @@ class FaceServiceV2(InterfaceService):
                 embeddings.append(None)
                 valid_imgs.append(None)
 
-        # 3. Get face embedding of validate face-> List of List
-        # get temp result
+        # return
         return embeddings, valid_imgs
     
-    def detect_face(self, images: List[Image.Image]):
+    def detect_face(
+        self, images: List[Image.Image]
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Detect face in image
+        
+        Args:
+            images (List[Image.Image]): list of images
+        
+        Returns:
+            Tuple: index_images, bboxes, kpts
+        """
         # preprocess
         preprocess_images = [
-            preprocess(image, new_shape=(640, 640), channel_first=True, normalize=True)
+            preprocess(image, new_shape=(640, 640), is_channel_first=True, normalize=True)
             for image in images
         ]
         input_images = np.array([image[0] for image in preprocess_images])
         ratios = np.array([image[1] for image in preprocess_images])
         dwdhs = np.array([image[2] for image in preprocess_images])
         # call API
-        outputs = self.headface.run(data=[input_images])['2833']
+        output_names = [meta.name for meta in self.headface.outputs] # get name from metadata
+        outputs = self.headface.run(data=[input_images])[output_names[1]] # get face detection
         index_images, bboxes, _, _, kpts = self.postprocess(
             outputs, ratios, dwdhs, det_thres=self.detection_thresh
         )
