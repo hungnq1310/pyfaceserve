@@ -81,6 +81,7 @@ class QdrantFaceDatabase(InterfaceDatabase):
                         points=[face_id],
                     ),
                 )
+                return {'status': 'success'} 
             elif person_id is not None:
                 self._client.delete(
                     collection_name=self.collection_name,
@@ -93,8 +94,10 @@ class QdrantFaceDatabase(InterfaceDatabase):
                         ])
                     ),
                 )
+                return {'status': 'success'}
             else:
-                print('No face id, person id or group id found')
+                return {'status': 'failed', 'message': 'No face id or person id found'}
+                
         elif group_id is not None:
             if person_id is not None:
                 self._client.delete(
@@ -112,6 +115,7 @@ class QdrantFaceDatabase(InterfaceDatabase):
                         ])
                     ),
                 )
+                return {'status': 'success'}
             else:
                 self._client.delete(
                     collection_name=self.collection_name,
@@ -124,8 +128,9 @@ class QdrantFaceDatabase(InterfaceDatabase):
                         ])
                     ),
                 )
+                return {'status': 'success'}
         else:
-            print('No face id, person id or group id found')
+            return {'status': 'failed', 'message': 'No group id found'}
             
     def list_faces(self, person_id: str, group_id: str):
         '''List all faces of a given person's id or group's id in collection'''
