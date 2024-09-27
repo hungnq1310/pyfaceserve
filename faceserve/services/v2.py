@@ -134,13 +134,14 @@ class FaceServiceV2(InterfaceService):
         index_images, det_bboxes, det_scores, det_labels  = pred[:, 0], pred[:,1:5], pred[:,6], pred[:, 5]
         kpts = pred[:, 7:] if pred.shape[1] > 6 else None
         # Filter, Normalize
-        for i in range(len(det_bboxes)):
-            det_bboxes[i] -= padding[i]
-            det_bboxes[i] /= ratios[i]    
-        if kpts is not None:
-            for i in range(len(kpts)):
-                kpts[i,0::3] = (kpts[i,0::3] - padding[i, 0]) / ratios[i]
-                kpts[i,1::3] = (kpts[i,1::3]- padding[i, 1]) / ratios[i]
+        for i, pad in enumerate(padding):
+            # filter bbox
+            filter_index = [index for index, value in enumerate(index_images) if value == i]
+            for j in range(len(filter_index)):
+                det_bboxes[j] = (det_bboxes[j] - pad ) / ratios[i]
+                if kpts is not None:
+                    kpts[j,0::3] = (kpts[j,0::3] - pad[0]) / ratios[i]
+                    kpts[j,1::3] = (kpts[j,1::3]- pad[1]) / ratios[i]
         # return
         return index_images, det_bboxes, det_scores, det_labels, kpts
 
@@ -252,7 +253,6 @@ class FaceServiceV2(InterfaceService):
             batch_crops.extend(crops_per_image)
         # 3. get valid face -> List of List
         embeddings, valid_crops = self.validate_face(batch_crops)
-        embeddings = [x.tolist() for x in embeddings]
         # 4. save crop to folder
         if len(valid_crops) < len(images) / 2:
             raise HTTPException(
@@ -270,6 +270,7 @@ class FaceServiceV2(InterfaceService):
             hashes.append(hashlib.md5(crop_pil.tobytes()).hexdigest())
             crop_pil.save(str(face_folder / f"{group_id}_{person_id}_{i}.jpg"))
         # 6. save face embedding to database
+        embeddings = [x.tolist() for x in embeddings]
         self.facedb.insert_faces(
             face_embs=zip(hashes, embeddings),
             group_id=group_id,
