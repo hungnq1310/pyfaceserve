@@ -252,6 +252,7 @@ class FaceServiceV2(InterfaceService):
             batch_crops.extend(crops_per_image)
         # 3. get valid face -> List of List
         embeddings, valid_crops = self.validate_face(batch_crops)
+        embeddings = [x.tolist() for x in embeddings]
         # 4. save crop to folder
         if len(valid_crops) < len(images) / 2:
             raise HTTPException(
