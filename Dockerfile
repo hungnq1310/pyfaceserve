@@ -10,8 +10,9 @@ RUN python -m venv /venv
 ENV PATH="/venv/bin:$PATH"
 
 RUN pip install nvidia-cuda-runtime-cu11 && \
+    pip install trism opencv-python opencv-python-headless tritonclient[all] && \
     pip install fastapi[standard] uvicorn python-multipart attrdict && \
-    pip install pillow numpy==1.26 grpcio python-dotenv scikit-image trism
+    pip install pillow numpy==1.26 grpcio python-dotenv scikit-image matplotlib
 
 FROM python:3.10-slim as runner
 
