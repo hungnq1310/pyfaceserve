@@ -17,6 +17,8 @@ FROM python:3.10-slim as runner
 
 COPY --from=compiler /venv /venv
 COPY faceserve /faceserve
+COPY main.py /main.py
+
 
 ENV PATH="/venv/bin:$PATH"
 
