@@ -86,17 +86,18 @@ async def get_face_image(id: str|None = None, group_id: str|None = None):
     for x in res:
         res_group = x.payload["group_id"]
         res_person = x.payload["person_id"]
-        res_hash = "".join(x.id.split("-"))
+        res_hash = x.id
         output.append(f"/imgs/{res_group}/{res_person}/{res_hash}.jpg")
     return output
 
 @router.delete("/delete")
 async def delete_face(face_id: str|None = None, id: str|None = None, group_id: str|None = None):
-    return FACES.delete_face(
+    message: dict = FACES.delete_face(
         face_id=face_id, 
         person_id=id, 
         group_id=group_id
     )
+    return JSONResponse(content=message, status_code=status.HTTP_200_OK)
 
 @router.post("/check/face")
 async def check_face_images(request: FaceRequest, id: str|None = None, group_id: str|None = None):
