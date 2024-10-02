@@ -9,6 +9,8 @@ RUN python -m venv /venv
 
 ENV PATH="/venv/bin:$PATH"
 
+RUN apt update && apt install -y libsm6 libxext6 ffmpeg libfontconfig1 libxrender1 libgl1-mesa-glx
+
 RUN pip install nvidia-cuda-runtime-cu11 && \
     pip install trism opencv-python opencv-python-headless tritonclient[all] && \
     pip install fastapi[standard] uvicorn python-multipart attrdict && \
