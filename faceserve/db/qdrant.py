@@ -10,10 +10,10 @@ class QdrantFaceDatabase(InterfaceDatabase):
     def __init__(
         self,
         collection_name: str,
-        host=os.getenv("QDRANT_HOST", "localhost"),
-        port=os.getenv("QDRANT_PORT", 6333),
-        url: Optional[str] = None,
-        api_key: Optional[str] = None,
+        host: Optional[str] = os.getenv("QDRANT_HOST", default="localhost"),
+        port: Optional[int] = os.getenv("QDRANT_PORT", default=6333),
+        url: Optional[str] = os.getenv("QDRANT_URL", default="localhost:6333"),
+        api_key: Optional[str] = os.getenv("QDRANT_API_KEY", default=None),
     ) -> None:
         self._client = self.connect_client(host, port, url, api_key)
         self.collection_name = collection_name
