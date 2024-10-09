@@ -252,6 +252,61 @@ class FaceServiceV2(InterfaceService):
         return {
             "message": "Face checking fail (No detection), please try again."
         }
+        
+
+    def check_attendance(
+        self,
+        image: Image.Image,
+        thresh: None | float = 0.5,
+        group_id: None | str = 'default',
+    ) -> dict:
+        """Check attendance of face images
+        """
+        # 1. detect faces in each image -> List of List
+        index_images, batch_bboxes, batch_kpts = self.detect_face(images=[image])
+        # 2. crop and align face -> List of List
+        crops = self.crop_and_align_face(image, batch_bboxes, batch_kpts)
+        # 3. get valid face -> List of List
+        embeddings, _ = self.validate_face(crops)
+
+        # ensure embeddings equal to bboxes
+        if len(embeddings) != len(batch_bboxes): 
+            return {
+            "check_attendance": "Fail to check attendance, please try again."
+        }
+
+        dict_checked = []
+        for index, emb in enumerate(embeddings):
+            if emb is None:
+                dict_checked.append({
+                    "face_id": "Unknown",
+                    "person_id": "Unknown",
+                    "group_id": group_id,
+                    "bbox": batch_bboxes[index]
+                })
+            else:
+                check_batch = self.facedb.check_face(emb, thresh)
+                if len(check_batch) == 0:
+                    dict_checked.append({
+                        "face_id": index_images[index],
+                        "person_id": "Unknown",
+                        "group_id": group_id,
+                        "bbox": batch_bboxes[index]
+                    })
+                else:
+                    for point in check_batch:
+                        dict_checked.append({
+                            "face_id": point.id,
+                            "person_id": point.payload['person_id'],
+                            "group_id": point.payload['group_id'],
+                            "bbox": batch_bboxes[index]
+                        })
+        # extract to csv
+        self.dict_to_csv(dict_checked, group_id)
+        return {
+            "check_attendance": dict_checked,
+        }
+
 
     def register_face(
         self, 
