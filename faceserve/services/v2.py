@@ -295,10 +295,12 @@ class FaceServiceV2(InterfaceService):
                     })
                 else:
                     for point in check_batch:
+                        if point.payload['group_id'] != group_id:
+                            continue
                         dict_checked.append({
                             "face_id": point.id,
                             "person_id": point.payload['person_id'],
-                            "group_id": point.payload['group_id'],
+                            "group_id": group_id,
                             "bbox": batch_bboxes[index]
                         })
         # extract to csv
