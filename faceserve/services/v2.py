@@ -193,7 +193,7 @@ class FaceServiceV2(InterfaceService):
         file_name = Path(group_id)
         save_dir = Path(save_dir)
         keys = ('face_id', 'person_id', 'group_id', 'bbox')
-        with open(f'{save_dir / file_name.stem}.csv', 'w', newline='') as output_file:
+        with open(f'{save_dir / "attendance" / file_name.stem}.csv', 'w', newline='') as output_file:
             dict_writer = csv.DictWriter(output_file, keys)
             dict_writer.writeheader()
             dict_writer.writerows(data)
@@ -265,13 +265,13 @@ class FaceServiceV2(InterfaceService):
         crops = self.crop_and_align_face(image, batch_bboxes, batch_kpts)
         # 3. get valid face -> List of List
         embeddings, _ = self.validate_face(crops)
-
         # ensure embeddings equal to bboxes
         if len(embeddings) != len(batch_bboxes): 
             return {
             "check_attendance": "Fail to check attendance, please try again."
         }
 
+        # 4. Verify face
         dict_checked = []
         for index, emb in enumerate(embeddings):
             if emb is None:
