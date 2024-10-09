@@ -12,7 +12,7 @@ class QdrantFaceDatabase(InterfaceDatabase):
         collection_name: str,
         host: Optional[str] = os.getenv("QDRANT_HOST", default="localhost"),
         port: Optional[int] = os.getenv("QDRANT_PORT", default=6333),
-        url: Optional[str] = os.getenv("QDRANT_URL", default="localhost:6333"),
+        url: Optional[str] = os.getenv("QDRANT_URL", default=None),
         api_key: Optional[str] = os.getenv("QDRANT_API_KEY", default=None),
     ) -> None:
         self._client = self.connect_client(host, port, url, api_key)
@@ -75,6 +75,8 @@ class QdrantFaceDatabase(InterfaceDatabase):
         '''Delete a face of a given person's id or group's id in collection'''
         if group_id is None:
             if face_id is not None:
+                if len(self.get_face_by_id(face_id)) == 0:
+                    return {'status': 'failed', 'message': 'No face id found'} 
                 self._client.delete(
                     collection_name=self.collection_name,
                     points_selector=models.PointIdsList(
@@ -83,6 +85,8 @@ class QdrantFaceDatabase(InterfaceDatabase):
                 )
                 return {'status': 'success'} 
             elif person_id is not None:
+                if len(self.list_faces(person_id, None)) == 0:
+                    return {'status': 'failed', 'message': 'No person id found'}
                 self._client.delete(
                     collection_name=self.collection_name,
                     points_selector=models.FilterSelector(filter=models.Filter(
@@ -100,6 +104,8 @@ class QdrantFaceDatabase(InterfaceDatabase):
                 
         elif group_id is not None:
             if person_id is not None:
+                if len(self.list_faces(person_id, group_id)) == 0:
+                    return {'status': 'failed', 'message': 'No person id found'}
                 self._client.delete(
                     collection_name=self.collection_name,
                     points_selector=models.FilterSelector(filter=models.Filter(
@@ -117,6 +123,8 @@ class QdrantFaceDatabase(InterfaceDatabase):
                 )
                 return {'status': 'success'}
             else:
+                if len(self.list_faces(None, group_id)) == 0:
+                    return {'status': 'failed', 'message': 'No group id found'}
                 self._client.delete(
                     collection_name=self.collection_name,
                     points_selector=models.FilterSelector(filter=models.Filter(
