@@ -190,7 +190,7 @@ class FaceServiceV2(InterfaceService):
         """Convert dict_checked (final result) to csv file"""
         import csv
 
-        keys = ('image_id', 'person_id', 'group_id', 'file_crop')
+        keys = ('face_id', 'person_id', 'group_id', 'bbox')
         with open(f'{group_id}.csv', 'w', newline='') as output_file:
             dict_writer = csv.DictWriter(output_file, keys)
             dict_writer.writeheader()
