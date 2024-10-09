@@ -186,12 +186,14 @@ class FaceServiceV2(InterfaceService):
             crops.append(image_align)
         return crops
 
-    def dict_to_csv(self, data: List[dict], group_id: str = 'default') -> None:
+    def dict_to_csv(self, data: List[dict], group_id: str = 'default', save_dir: str = 'temp') -> None:
         """Convert dict_checked (final result) to csv file"""
         import csv
 
+        file_name = Path(group_id)
+        save_dir = Path(save_dir)
         keys = ('face_id', 'person_id', 'group_id', 'bbox')
-        with open(f'{group_id}.csv', 'w', newline='') as output_file:
+        with open(f'{save_dir / file_name.stem}.csv', 'w', newline='') as output_file:
             dict_writer = csv.DictWriter(output_file, keys)
             dict_writer.writeheader()
             dict_writer.writerows(data)
@@ -204,7 +206,7 @@ class FaceServiceV2(InterfaceService):
         self,  
         image: Image.Image, 
         thresh: None | float = 0.5, 
-        person_id: None | str = '0',W
+        person_id: None | str = '0',
     ) -> dict:
         """Check face images
         """
@@ -253,6 +255,7 @@ class FaceServiceV2(InterfaceService):
         image: Image.Image,
         thresh: None | float = 0.5,
         group_id: None | str = 'default',
+        face_folder: None | str = 'temp',
     ) -> dict:
         """Check attendance of face images
         """
@@ -298,7 +301,7 @@ class FaceServiceV2(InterfaceService):
                             "bbox": batch_bboxes[index]
                         })
         # extract to csv
-        self.dict_to_csv(dict_checked, group_id)
+        self.dict_to_csv(dict_checked, group_id, face_folder)
         return {
             "check_attendance": dict_checked,
         }
