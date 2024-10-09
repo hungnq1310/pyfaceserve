@@ -204,55 +204,49 @@ class FaceServiceV2(InterfaceService):
         self,  
         image: Image.Image, 
         thresh: None | float = 0.5, 
-        group_id: None | str = 'default', 
-        person_id: None | str = '0',
-        save_dir: None | str = 'temp',
+        person_id: None | str = '0',W
     ) -> dict:
         """Check face images
         """
         # 1. detect faces in each image -> List of List
         _, batch_bboxes, batch_kpts = self.detect_face(images=[image])
+        if len(batch_bboxes) == 0:
+            return {
+                "message": "Face checking fail (No detection), please try again.",
+                "check": "false"
+            }
+        elif len(batch_bboxes) > 1:
+            return {
+                "message": "Only one person in one image, please try again.",
+                "check": "false"
+            }
+    
         # 2. crop and align face -> List of List
         crops = self.crop_and_align_face(image, batch_bboxes, batch_kpts)
+        assert len(crops) == len(batch_bboxes), "Number of crops and bboxes are not the same"
+
         # 3. get valid face -> List of List
         embeddings, valid_crops = self.validate_face(crops)
 
-        # 4. save crop to folder
-        file_crop_paths = save_crop(
-            bboxes=batch_bboxes, 
-            path=f"{group_id}_image_{person_id}_", #* name of saved image
-            img=image, #* this is the original image 
-            save_dir=save_dir, 
-            names=['face']
-        )
-
-        # 5. check face
-        dict_checked = []
-        check_batch = [self.facedb.check_face(x, thresh) for x in embeddings]
-        for i in range(len(check_batch)):
-            if len(check_batch[i]) == 0:
-                continue
-            for point in check_batch[i]:
-                dict_checked.append({
-                    "image_id": point.id,
-                    "person_id": point.payload['person_id'],
-                    "group_id": point.payload['group_id'],
-                    'file_crop': file_crop_paths[i]
-                })
-        # 6. extract to csv
-        self.dict_to_csv(dict_checked, group_id)
-
-        # N images - M faces
-        if len(valid_crops) > 1:
-            return {"check_group": dict_checked, "num_detections": len(batch_bboxes)}
-        # N images - N faces
-        elif len(valid_crops) == 1:
-            return {"check_per_person": dict_checked, "num_detections": len(batch_bboxes)}
-        
+        # 4. Verify face
+        if embeddings[0] is None:
+            return {
+                "message": "Detect fake face, please try again.",
+                "check": "false"
+            }
+        check_batch = self.facedb.check_face(embeddings[0], thresh)
+        if len(check_batch) != 0:
+            # check if exist any point equal to person_id
+            for point in check_batch:
+                if point.payload['person_id'] == person_id:
+                    return {
+                        "message": "Face recognition success.",
+                        "check": "true"
+                    }
         return {
-            "message": "Face checking fail (No detection), please try again."
+            "message": "Face recognition failed, please try again.",
+            "check": "false"
         }
-        
 
     def check_attendance(
         self,
