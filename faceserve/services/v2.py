@@ -157,7 +157,7 @@ class FaceServiceV2(InterfaceService):
         for i, pad in enumerate(padding):
             # filter bbox
             filter_index = [index for index, value in enumerate(index_images) if value == i]
-            for j in range(len(filter_index)):
+            for j in filter_index:
                 det_bboxes[j] = (det_bboxes[j] - pad ) / ratios[i]
                 if kpts is not None:
                     kpts[j,0::3] = (kpts[j,0::3] - pad[0]) / ratios[i]
@@ -198,7 +198,7 @@ class FaceServiceV2(InterfaceService):
     ### Main Modules
     ###
     def check_face(
-        self, 
+        self,  
         image: Image.Image, 
         thresh: None | float = 0.5, 
         group_id: None | str = 'default', 
@@ -285,7 +285,7 @@ class FaceServiceV2(InterfaceService):
         embeddings, valid_crops = self.validate_face(batch_crops)
         embeddings = [x.tolist() for x in embeddings]
 
-        # 4. save crop to folder
+        # 4. verify
         if len(valid_crops) < len(images) / 2:
             return {
                 "message": f"Your face images is not valid, only {len(valid_crops)}/{len(images)} accepted images, please try again.",
