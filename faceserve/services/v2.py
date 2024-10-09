@@ -64,7 +64,7 @@ class FaceServiceV2(InterfaceService):
     
     def validate_face(
         self, images: List[Image.Image | np.ndarray]
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Validate face images
         
@@ -89,6 +89,9 @@ class FaceServiceV2(InterfaceService):
             if result_softmax[i] > self.spoofing_thresh:
                 embeddings.append(temp[i])
                 valid_imgs.append(images[i])
+            else:
+                embeddings.append(None)
+                valid_imgs.append(None)
 
         # return
         return embeddings, valid_imgs
