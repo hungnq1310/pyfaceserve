@@ -193,6 +193,9 @@ class FaceServiceV2(InterfaceService):
         file_name = Path(group_id)
         save_dir = Path(save_dir)
         keys = ('face_id', 'person_id', 'group_id', 'bbox')
+
+        if not (save_dir / "attendance").exists():
+            (save_dir / "attendance").mkdir(parents=True, exist_ok=True)
         with open(f'{save_dir / "attendance" / file_name.stem}.csv', 'w', newline='') as output_file:
             dict_writer = csv.DictWriter(output_file, keys)
             dict_writer.writeheader()
@@ -205,8 +208,8 @@ class FaceServiceV2(InterfaceService):
     def check_face(
         self,  
         image: Image.Image, 
-        thresh: None | float = 0.5, 
-        person_id: None | str = '0',
+        thresh: float = 0.5, 
+        person_id: str = '0',
     ) -> dict:
         """Check face images
         """
@@ -253,14 +256,14 @@ class FaceServiceV2(InterfaceService):
     def check_attendance(
         self,
         image: Image.Image,
-        thresh: None | float = 0.5,
-        group_id: None | str = 'default',
+        thresh: float = 0.5,
+        group_id: str = 'default',
         face_folder: None | str = 'temp',
     ) -> dict:
         """Check attendance of face images
         """
         # 1. detect faces in each image -> List of List
-        index_images, batch_bboxes, batch_kpts = self.detect_face(images=[image])
+        _, batch_bboxes, batch_kpts = self.detect_face(images=[image])
         # 2. crop and align face -> List of List
         crops = self.crop_and_align_face(image, batch_bboxes, batch_kpts)
         # 3. get valid face -> List of List
@@ -279,16 +282,16 @@ class FaceServiceV2(InterfaceService):
                     "face_id": "Unknown",
                     "person_id": "Unknown",
                     "group_id": group_id,
-                    "bbox": batch_bboxes[index]
+                    "bbox": batch_bboxes[index].tolist()
                 })
             else:
                 check_batch = self.facedb.check_face(emb, thresh)
                 if len(check_batch) == 0:
                     dict_checked.append({
-                        "face_id": index_images[index],
+                        "face_id": "Unknown",
                         "person_id": "Unknown",
                         "group_id": group_id,
-                        "bbox": batch_bboxes[index]
+                        "bbox": batch_bboxes[index].tolist()
                     })
                 else:
                     for point in check_batch:
@@ -298,7 +301,7 @@ class FaceServiceV2(InterfaceService):
                             "face_id": point.id,
                             "person_id": point.payload['person_id'],
                             "group_id": group_id,
-                            "bbox": batch_bboxes[index]
+                            "bbox": batch_bboxes[index].tolist()
                         })
         # extract to csv
         self.dict_to_csv(dict_checked, group_id, face_folder)
