@@ -3,6 +3,7 @@ from PIL import Image
 from typing import List, Tuple, Any
 from pathlib import Path
 import hashlib
+from collections import Counter
 
 from trism import TritonModel
 from faceserve.services.interface import InterfaceService
@@ -64,7 +65,7 @@ class FaceServiceV2(InterfaceService):
     
     def validate_face(
         self, images: List[Image.Image | np.ndarray]
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Validate face images
         
@@ -89,6 +90,9 @@ class FaceServiceV2(InterfaceService):
             if result_softmax[i] > self.spoofing_thresh:
                 embeddings.append(temp[i])
                 valid_imgs.append(images[i])
+            else:
+                embeddings.append(None)
+                valid_imgs.append(None)
 
         # return
         return embeddings, valid_imgs
@@ -157,7 +161,7 @@ class FaceServiceV2(InterfaceService):
         for i, pad in enumerate(padding):
             # filter bbox
             filter_index = [index for index, value in enumerate(index_images) if value == i]
-            for j in range(len(filter_index)):
+            for j in filter_index:
                 det_bboxes[j] = (det_bboxes[j] - pad ) / ratios[i]
                 if kpts is not None:
                     kpts[j,0::3] = (kpts[j,0::3] - pad[0]) / ratios[i]
@@ -183,12 +187,17 @@ class FaceServiceV2(InterfaceService):
             crops.append(image_align)
         return crops
 
-    def dict_to_csv(self, data: List[dict], group_id: str = 'default') -> None:
+    def dict_to_csv(self, data: List[dict], group_id: str = 'default', save_dir: str = 'temp') -> None:
         """Convert dict_checked (final result) to csv file"""
         import csv
 
-        keys = ('image_id', 'person_id', 'group_id', 'file_crop')
-        with open(f'{group_id}.csv', 'w', newline='') as output_file:
+        file_name = Path(group_id)
+        save_dir = Path(save_dir)
+        keys = ('face_id', 'person_id', 'group_id', 'bbox')
+
+        if not (save_dir / "attendance").exists():
+            (save_dir / "attendance").mkdir(parents=True, exist_ok=True)
+        with open(f'{save_dir / "attendance" / file_name.stem}.csv', 'w', newline='') as output_file:
             dict_writer = csv.DictWriter(output_file, keys)
             dict_writer.writeheader()
             dict_writer.writerows(data)
@@ -198,57 +207,109 @@ class FaceServiceV2(InterfaceService):
     ### Main Modules
     ###
     def check_face(
-        self, 
+        self,  
         image: Image.Image, 
-        thresh: None | float = 0.5, 
-        group_id: None | str = 'default', 
-        person_id: None | str = '0',
-        save_dir: None | str = 'temp',
+        thresh: float = 0.5, 
+        person_id: str = '0',
     ) -> dict:
         """Check face images
+        """
+        # 1. detect faces in each image -> List of List
+        _, batch_bboxes, batch_kpts = self.detect_face(images=[image])
+        if len(batch_bboxes) == 0:
+            return {
+                "message": "Face checking fail (No detection), please try again.",
+                "check": "false"
+            }
+        elif len(batch_bboxes) > 1:
+            return {
+                "message": "Only one person in one image, please try again.",
+                "check": "false"
+            }
+    
+        # 2. crop and align face -> List of List
+        crops = self.crop_and_align_face(image, batch_bboxes, batch_kpts)
+        assert len(crops) == len(batch_bboxes), "Number of crops and bboxes are not the same"
+
+        # 3. get valid face -> List of List
+        embeddings, valid_crops = self.validate_face(crops)
+
+        # 4. Verify face
+        if embeddings[0] is None:
+            return {
+                "message": "Detect fake face, please try again.",
+                "check": "false"
+            }
+        check_batch = self.facedb.check_face(embeddings[0], thresh)
+        if len(check_batch) != 0:
+            # check if exist any point equal to person_id
+            for point in check_batch:
+                if point.payload['person_id'] == person_id:
+                    return {
+                        "message": "Face recognition success.",
+                        "check": "true"
+                    }
+        return {
+            "message": "Face recognition failed, please try again.",
+            "check": "false"
+        }
+
+    def check_attendance(
+        self,
+        image: Image.Image,
+        thresh: float = 0.5,
+        group_id: str = 'default',
+        face_folder: None | str = 'temp',
+    ) -> dict:
+        """Check attendance of face images
         """
         # 1. detect faces in each image -> List of List
         _, batch_bboxes, batch_kpts = self.detect_face(images=[image])
         # 2. crop and align face -> List of List
         crops = self.crop_and_align_face(image, batch_bboxes, batch_kpts)
         # 3. get valid face -> List of List
-        embeddings, valid_crops = self.validate_face(crops)
-
-        # 4. save crop to folder
-        file_crop_paths = save_crop(
-            bboxes=batch_bboxes, 
-            path=f"{group_id}_image_{person_id}_", #* name of saved image
-            img=image, #* this is the original image 
-            save_dir=save_dir, 
-            names=['face']
-        )
-
-        # 5. check face
-        dict_checked = []
-        check_batch = [self.facedb.check_face(x, thresh) for x in embeddings]
-        for i in range(len(check_batch)):
-            if len(check_batch[i]) == 0:
-                continue
-            for point in check_batch[i]:
-                dict_checked.append({
-                    "image_id": point.id,
-                    "person_id": point.payload['person_id'],
-                    "group_id": point.payload['group_id'],
-                    'file_crop': file_crop_paths[i]
-                })
-        # 6. extract to csv
-        self.dict_to_csv(dict_checked, group_id)
-
-        # N images - M faces
-        if len(valid_crops) > 1:
-            return {"check_group": dict_checked, "num_detections": len(batch_bboxes)}
-        # N images - N faces
-        elif len(valid_crops) == 1:
-            return {"check_per_person": dict_checked, "num_detections": len(batch_bboxes)}
-        
-        return {
-            "message": "Face checking fail (No detection), please try again."
+        embeddings, _ = self.validate_face(crops)
+        # ensure embeddings equal to bboxes
+        if len(embeddings) != len(batch_bboxes): 
+            return {
+            "check_attendance": "Fail to check attendance, please try again."
         }
+
+        # 4. Verify face
+        dict_checked = []
+        for index, emb in enumerate(embeddings):
+            if emb is None:
+                dict_checked.append({
+                    "face_id": "Unknown",
+                    "person_id": "Unknown",
+                    "group_id": group_id,
+                    "bbox": batch_bboxes[index].tolist()
+                })
+            else:
+                check_batch = self.facedb.check_face(emb, thresh)
+                if len(check_batch) == 0:
+                    dict_checked.append({
+                        "face_id": "Unknown",
+                        "person_id": "Unknown",
+                        "group_id": group_id,
+                        "bbox": batch_bboxes[index].tolist()
+                    })
+                else:
+                    for point in check_batch:
+                        if point.payload['group_id'] != group_id:
+                            continue
+                        dict_checked.append({
+                            "face_id": point.id,
+                            "person_id": point.payload['person_id'],
+                            "group_id": group_id,
+                            "bbox": batch_bboxes[index].tolist()
+                        })
+        # extract to csv
+        # self.dict_to_csv(dict_checked, group_id, face_folder)
+        return {
+            "check_attendance": dict_checked,
+        }
+
 
     def register_face(
         self, 
@@ -270,11 +331,12 @@ class FaceServiceV2(InterfaceService):
             dict: message
         """
         # 1. detect faces in each image
-        _, bboxes, kpts = self.detect_face(images=images)
-        if len(bboxes) != len(images) or len(kpts) != len(images):
+        index_images, bboxes, kpts = self.detect_face(images=images)
+        counter = Counter(index_images)
+        if any([value > 1 for value in counter.values()]):
             #! number detections of all image compare with list bboxes -> ensure one person in one image
             return {
-                "message": f"Number of batch bboxes, keypoints and batch images are not the same"  
+                "message": f"Some images are invalid, only having one person per image.",  
             }
         # 2. crop and align face -> List of List
         batch_crops = []
@@ -285,29 +347,33 @@ class FaceServiceV2(InterfaceService):
         embeddings, valid_crops = self.validate_face(batch_crops)
         embeddings = [x.tolist() for x in embeddings]
 
-        # 4. save crop to folder
+        # 4. verify
         if len(valid_crops) < len(images) / 2:
             return {
                 "message": f"Your face images is not valid, only {len(valid_crops)}/{len(images)} accepted images, please try again.",
             }
         # 5. save and hash face embedding to local
+        # foler_registry = Path(face_folder) / "registry"
+        # foler_registry.mkdir(parents=True, exist_ok=True)
+
         hashes, crop_save_paths = [], []
         for i, crop in enumerate(valid_crops):
-            crop_save_path = f"{face_folder}/{group_id}_{person_id}_{i}.jpg"
+            # crop_save_path = f"{foler_registry}/{group_id}_{person_id}_{i}.jpg"
             # some preprocess
             if crop.shape[0] == 3:
                 crop = np.transpose(crop, (1, 2, 0)) 
             crop_pil = Image.fromarray((crop*255).astype(np.uint8))
-            crop_pil.save(crop_save_path)
+            # crop_pil.save(crop_save_path)
             # stuff
             hashes.append(hashlib.md5(crop_pil.tobytes()).hexdigest())
-            crop_save_paths.append(crop_save_path)
+            # crop_save_paths.append(crop_save_path)
         # 6. save face embedding to database
         self.facedb.insert_faces(
             face_embs=zip(hashes, embeddings),
             group_id=group_id,
             person_id=person_id
         )
-        return {
-            f"{key}": f"{crop_save_path}" for key, crop_save_path in zip(hashes, crop_save_paths)
-        } 
+        # return {
+        #     f"{key}": f"{crop_save_path}" for key, crop_save_path in zip(hashes, crop_save_paths)
+        # } 
+        return hashes

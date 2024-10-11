@@ -1,0 +1,16 @@
+nvidia-cuda-runtime-cu12
+trism 
+opencv-python 
+opencv-python-headless 
+tritonclient[all]
+fastapi[standard] 
+uvicorn 
+python-multipart 
+attrdict 
+qdrant_client
+pillow 
+numpy==2.0.1 
+grpcio 
+python-dotenv 
+scikit-image 
+matplotlib
