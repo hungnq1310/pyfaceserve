@@ -3,6 +3,7 @@ from PIL import Image
 from typing import List, Tuple, Any
 from pathlib import Path
 import hashlib
+from collections import Counter
 
 from trism import TritonModel
 from faceserve.services.interface import InterfaceService
@@ -330,11 +331,12 @@ class FaceServiceV2(InterfaceService):
             dict: message
         """
         # 1. detect faces in each image
-        _, bboxes, kpts = self.detect_face(images=images)
-        if len(bboxes) != len(images) or len(kpts) != len(images):
+        index_images, bboxes, kpts = self.detect_face(images=images)
+        counter = Counter(index_images)
+        if any([value > 1 for value in counter.values()]):
             #! number detections of all image compare with list bboxes -> ensure one person in one image
             return {
-                "message": f"Number of batch bboxes, keypoints and batch images are not the same"  
+                "message": f"Some images are invalid, only having one person per image.",  
             }
         # 2. crop and align face -> List of List
         batch_crops = []
