@@ -305,7 +305,7 @@ class FaceServiceV2(InterfaceService):
                             "bbox": batch_bboxes[index].tolist()
                         })
         # extract to csv
-        self.dict_to_csv(dict_checked, group_id, face_folder)
+        # self.dict_to_csv(dict_checked, group_id, face_folder)
         return {
             "check_attendance": dict_checked,
         }
@@ -353,26 +353,27 @@ class FaceServiceV2(InterfaceService):
                 "message": f"Your face images is not valid, only {len(valid_crops)}/{len(images)} accepted images, please try again.",
             }
         # 5. save and hash face embedding to local
-        foler_registry = Path(face_folder) / "registry"
-        foler_registry.mkdir(parents=True, exist_ok=True)
+        # foler_registry = Path(face_folder) / "registry"
+        # foler_registry.mkdir(parents=True, exist_ok=True)
 
         hashes, crop_save_paths = [], []
         for i, crop in enumerate(valid_crops):
-            crop_save_path = f"{foler_registry}/{group_id}_{person_id}_{i}.jpg"
+            # crop_save_path = f"{foler_registry}/{group_id}_{person_id}_{i}.jpg"
             # some preprocess
             if crop.shape[0] == 3:
                 crop = np.transpose(crop, (1, 2, 0)) 
             crop_pil = Image.fromarray((crop*255).astype(np.uint8))
-            crop_pil.save(crop_save_path)
+            # crop_pil.save(crop_save_path)
             # stuff
             hashes.append(hashlib.md5(crop_pil.tobytes()).hexdigest())
-            crop_save_paths.append(crop_save_path)
+            # crop_save_paths.append(crop_save_path)
         # 6. save face embedding to database
         self.facedb.insert_faces(
             face_embs=zip(hashes, embeddings),
             group_id=group_id,
             person_id=person_id
         )
-        return {
-            f"{key}": f"{crop_save_path}" for key, crop_save_path in zip(hashes, crop_save_paths)
-        } 
+        # return {
+        #     f"{key}": f"{crop_save_path}" for key, crop_save_path in zip(hashes, crop_save_paths)
+        # } 
+        return hashes
