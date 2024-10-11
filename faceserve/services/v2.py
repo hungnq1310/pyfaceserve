@@ -353,9 +353,12 @@ class FaceServiceV2(InterfaceService):
                 "message": f"Your face images is not valid, only {len(valid_crops)}/{len(images)} accepted images, please try again.",
             }
         # 5. save and hash face embedding to local
+        foler_registry = Path(face_folder) / "registry"
+        foler_registry.mkdir(parents=True, exist_ok=True)
+
         hashes, crop_save_paths = [], []
         for i, crop in enumerate(valid_crops):
-            crop_save_path = f"{face_folder}/{group_id}_{person_id}_{i}.jpg"
+            crop_save_path = f"{foler_registry}/{group_id}_{person_id}_{i}.jpg"
             # some preprocess
             if crop.shape[0] == 3:
                 crop = np.transpose(crop, (1, 2, 0)) 
