@@ -18,7 +18,7 @@ Load models and thresh.
 load_dotenv()
 # Model
 TRITON_URL = os.getenv("TRITON_URL", default="localhost:6000")
-IS_GRPC = os.getenv("IS_GRPC", default=False)
+IS_GRPC = bool(os.getenv("IS_GRPC", default=False))
 DETECTION_NAME= os.getenv("DETECTION_NAME", default="face_detection")
 SPOOFING_NAME = os.getenv("SPOOFING_NAME", default="face_spoofing")
 RECOGNITION_NAME = os.getenv("RECOGNITION_NAME", default="face_recognition")
@@ -28,8 +28,9 @@ DETECTION_THRESH = float(os.getenv("DETECTION_THRESH", default=0.7))
 SPOOFING_THRESH = float(os.getenv("SPOOFING_THRESH", default=0.4))
 RECOGNITION_THRESH = float(os.getenv("RECOGNITION_THRESH", default=0.4))
 # Face db storage.
+DB_NAME = os.getenv("DB_NAME", default="faces_collection")
 FACES = QdrantFaceDatabase(
-    collection_name="faces_collection",
+    collection_name=DB_NAME,
 )
 FACES_IMG_DIR = pathlib.Path(os.getenv("IMG_DIR", default="face_images"))
 FACES_IMG_DIR.mkdir(exist_ok=True)
