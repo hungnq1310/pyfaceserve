@@ -11,6 +11,7 @@ services:
       - RECOGNITION_THRESH=0.4
       - QDRANT_URL=localhost:6333
       - IMG_DIR=face_images
+      - DB_NAME=faces_collection
     volumes:
       - ${PWD}/face_images:/face_images
     network_mode: "host"
