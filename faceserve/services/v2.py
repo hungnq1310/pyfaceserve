@@ -368,7 +368,7 @@ class FaceServiceV2(InterfaceService):
             hashes.append(hashlib.md5(crop_pil.tobytes()).hexdigest())
             # crop_save_paths.append(crop_save_path)
         # 6. save face embedding to database
-        self.facedb.insert_faces(
+        hash_in_db = self.facedb.insert_faces(
             face_embs=zip(hashes, embeddings),
             group_id=group_id,
             person_id=person_id
@@ -376,4 +376,4 @@ class FaceServiceV2(InterfaceService):
         # return {
         #     f"{key}": f"{crop_save_path}" for key, crop_save_path in zip(hashes, crop_save_paths)
         # } 
-        return hashes
+        return hash_in_db

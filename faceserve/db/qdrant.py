@@ -70,6 +70,9 @@ class QdrantFaceDatabase(InterfaceDatabase):
                 ) for hash_id, face_emb in face_embs 
             ],
         )
+        result = self.list_faces(person_id, group_id)
+        return [x.id for x in result]
+
 
     def delete_face(self, face_id: str, person_id: str, group_id: str):
         '''Delete a face of a given person's id or group's id in collection'''
