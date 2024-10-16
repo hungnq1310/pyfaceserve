@@ -345,7 +345,8 @@ class FaceServiceV2(InterfaceService):
             batch_crops.extend(crops_per_image)
         # 3. get valid face -> List of List
         embeddings, valid_crops = self.validate_face(batch_crops)
-        embeddings = [x.tolist() for x in embeddings]
+        embeddings = [x.tolist() for x in embeddings if x is not None]
+        valid_crops = [x for x in valid_crops if x is not None]
 
         # 4. verify
         if len(valid_crops) < len(images) / 2:
