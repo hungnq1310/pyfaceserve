@@ -37,5 +37,5 @@ jobs:
         with:
           push: true
           platforms: linux/amd64
-          tags: heronq02/pyfaceserve:v1.0.0
+          tags: ${{ secrets.DOCKER_USERNAME }}/pyfaceserve:v1.0.0
 
