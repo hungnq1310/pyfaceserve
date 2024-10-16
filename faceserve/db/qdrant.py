@@ -70,7 +70,7 @@ class QdrantFaceDatabase(InterfaceDatabase):
                 ) for hash_id, face_emb in face_embs 
             ],
         )
-        result = self.list_faces(person_id, group_id)
+        result = [x for x in self.list_faces(person_id=id, group_id=group_id)[0] if x is not None]
         return [x.id for x in result]
 
 
