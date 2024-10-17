@@ -79,9 +79,7 @@ async def register_upload(files: list[UploadFile], id: str, group_id: str = "def
 @router.get("/faces")
 async def get_face_image(id: str|None = None, group_id: str|None = None):
     if not FACES.list_faces(person_id=id, group_id=group_id)[0]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="No image found, database empty"
-        )
+        return []
     res = [x for x in FACES.list_faces(person_id=id, group_id=group_id)[0] if x is not None]
     output = []
     for x in res:
