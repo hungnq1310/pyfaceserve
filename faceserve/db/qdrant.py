@@ -183,7 +183,7 @@ class QdrantFaceDatabase(InterfaceDatabase):
             )
         return self._client.scroll(
             collection_name=self.collection_name,
-            limit=1000,
+            limit=10,
             with_payload=True,
         )
     
