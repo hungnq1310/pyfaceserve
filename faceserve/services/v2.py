@@ -265,6 +265,10 @@ class FaceServiceV2(InterfaceService):
         """
         # 1. detect faces in each image -> List of List
         _, batch_bboxes, batch_kpts = self.detect_face(images=[image])
+        if len(batch_bboxes) == 0:
+            return {
+                "check_attendance": "Node to check attendance, please try again."
+            }
         # 2. crop and align face -> List of List
         crops = self.crop_and_align_face(image, batch_bboxes, batch_kpts)
         # 3. get valid face -> List of List
@@ -337,6 +341,10 @@ class FaceServiceV2(InterfaceService):
             #! number detections of all image compare with list bboxes -> ensure one person in one image
             return {
                 "message": f"Some images are invalid, only having one person per image.",  
+            }
+        if len(bboxes) == 0 or len(kpts) == 0:
+            return {
+                "message": "No face detected, please try again.",
             }
         # 2. crop and align face -> List of List
         batch_crops = []
