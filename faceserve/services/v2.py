@@ -338,6 +338,10 @@ class FaceServiceV2(InterfaceService):
             return {
                 "message": f"Some images are invalid, only having one person per image.",  
             }
+        if len(bboxes) == 0 or len(kpts) == 0:
+            return {
+                "message": "No face detected, please try again.",
+            }
         # 2. crop and align face -> List of List
         batch_crops = []
         for i, image in enumerate(images):
