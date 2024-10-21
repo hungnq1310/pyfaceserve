@@ -8,7 +8,7 @@ app = FastAPI()
 app.mount("/imgs", StaticFiles(directory=FACES_IMG_DIR), name="imgs")
 app.include_router(v2.router)
 
-origins = [*]
+origins = ["*"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
