@@ -58,7 +58,7 @@ router = APIRouter(prefix="/v1")
 @router.post("/register")
 async def register(id: str, request: FaceRequest, group_id: str = "default"):
     images = [base64.b64decode(x) for x in request.base64images]
-    images = [Image.open(BytesIO(x)) for x in images]
+    images = [Image.open(BytesIO(x)).convert("RGB") for x in images]
     hashes_path = service.register_face(
         images=images, person_id=id, group_id=group_id, face_folder=FACES_IMG_DIR
     )
