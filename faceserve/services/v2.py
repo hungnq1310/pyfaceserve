@@ -211,6 +211,7 @@ class FaceServiceV2(InterfaceService):
         image: Image.Image, 
         thresh: float = 0.5, 
         person_id: str = '0',
+        group_id: str = 'default',
     ) -> dict:
         """Check face images
         """
@@ -240,11 +241,13 @@ class FaceServiceV2(InterfaceService):
                 "message": "Detect fake face, please try again.",
                 "check": "false"
             }
-        check_batch = self.facedb.check_face(embeddings[0], thresh)
+        check_batch = self.facedb.check_face(embeddings[0], thresh, person_id, group_id)
         if len(check_batch) != 0:
             # check if exist any point equal to person_id
             for point in check_batch:
-                if point.payload['person_id'] == person_id:
+                if (point.payload['person_id'] == person_id and
+                    point.payload['group_id'] == group_id
+                    ):
                     return {
                         "message": "Face recognition success.",
                         "check": "true"
