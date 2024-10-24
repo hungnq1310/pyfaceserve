@@ -221,15 +221,12 @@ class FaceServiceV2(InterfaceService):
                 "message": "Face checking fail (No detection), please try again.",
                 "check": "false"
             }
-        elif len(batch_bboxes) > 1:
-            return {
-                "message": "Only one person in one image, please try again.",
-                "check": "false"
-            }
-    
+        # get the biggest bbox
+        batch_bboxes, batch_kpts = self.sort_bbox_kpts(batch_bboxes, batch_kpts)
+
         # 2. crop and align face -> List of List
-        crops = self.crop_and_align_face(image, batch_bboxes, batch_kpts)
-        assert len(crops) == len(batch_bboxes), "Number of crops and bboxes are not the same"
+        crops = self.crop_and_align_face(image, [batch_bboxes[0]], [batch_kpts[0]])
+        # assert len(crops) == len(batch_bboxes), "Number of crops and bboxes are not the same"
 
         # 3. get valid face -> List of List
         embeddings, valid_crops = self.validate_face(crops)
@@ -393,3 +390,19 @@ class FaceServiceV2(InterfaceService):
         #     f"{key}": f"{crop_save_path}" for key, crop_save_path in zip(hashes, crop_save_paths)
         # } 
         return hash_in_db
+    
+    def sort_bbox_kpts(self, bbox: np.ndarray, keypoints: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+
+        areas = [((x2 - x1) * (y2 - y1)) for (x1, y1, x2, y2) in bbox]
+
+        # Ghép bbox với keypoints và diện tích lại với nhau
+        bbox_keypoint_area = list(zip(bbox, keypoints, areas))
+
+        # Sắp xếp theo diện tích (theo thứ tự tăng dần)
+        sorted_bbox_keypoint_area = sorted(bbox_keypoint_area, key=lambda x: x[2])
+
+        # Sau khi sắp xếp, ta tách lại bbox và keypoints
+        sorted_bbox = [item[0] for item in sorted_bbox_keypoint_area]
+        sorted_keypoints = [item[1] for item in sorted_bbox_keypoint_area]
+
+        return sorted_bbox, sorted_keypoints
