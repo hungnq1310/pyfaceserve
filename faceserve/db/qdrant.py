@@ -57,6 +57,22 @@ class QdrantFaceDatabase(InterfaceDatabase):
         group_id: str, 
     ):
         '''Insert list of faces of a person to collection'''
+        if len(self.list_faces(person_id, group_id)) != 0:
+            self._client.delete(
+            collection_name=self.collection_name,
+            points_selector=models.FilterSelector(filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="person_id",
+                        match=models.MatchValue(value=f"{person_id}"),
+                    ),
+                    models.FieldCondition(
+                        key="group_id",
+                        match=models.MatchValue(value=f"{group_id}"),
+                    ),
+                ])
+            ),
+        )
         self._client.upsert(
             collection_name=self.collection_name,
             points=[
