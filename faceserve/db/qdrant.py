@@ -214,26 +214,44 @@ class QdrantFaceDatabase(InterfaceDatabase):
     def check_face(self, 
                    face_emb, 
                    thresh, 
-                   person_id, 
-                   group_id: Optional[str]="default"
+                   person_id: Optional[str]=None, 
+                   group_id: Optional[str]=None,
                    ):
-        res = self._client.search(
-            collection_name=self.collection_name, 
-            query_vector=face_emb, 
-            limit=1,
-            query_filter=models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="person_id",
-                        match=models.MatchValue(value=f"{person_id}"),
-                    ),
-                    models.FieldCondition(
-                        key="group_id",
-                        match=models.MatchValue(value=f"{group_id}"),
-                    ),
-                ]
-            ),
-        )
+        res = []
+        if person_id is not None:
+            res = self._client.search(
+                collection_name=self.collection_name, 
+                query_vector=face_emb, 
+                limit=1,
+                query_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="person_id",
+                            match=models.MatchValue(value=f"{person_id}"),
+                        ),
+                    ]
+                ),
+            )
+        elif group_id is not None:
+            res = self._client.search(
+                collection_name=self.collection_name, 
+                query_vector=face_emb, 
+                limit=1,
+                query_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="group_id",
+                            match=models.MatchValue(value=f"{group_id}"),
+                        ),
+                    ]
+                ),
+            )
+        else:
+            res = self._client.search(
+                collection_name=self.collection_name, 
+                query_vector=face_emb, 
+                limit=1,
+            )
         output = []
         if len(res) > 0:
             for r in res:
