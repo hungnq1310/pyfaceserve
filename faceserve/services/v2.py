@@ -221,15 +221,12 @@ class FaceServiceV2(InterfaceService):
                 "message": "Face checking fail (No detection), please try again.",
                 "check": "false"
             }
-        elif len(batch_bboxes) > 1:
-            return {
-                "message": "Only one person in one image, please try again.",
-                "check": "false"
-            }
-    
+        # get the biggest bbox
+        batch_bboxes, batch_kpts = self.sort_bbox_kpts(batch_bboxes, batch_kpts)
+
         # 2. crop and align face -> List of List
-        crops = self.crop_and_align_face(image, batch_bboxes, batch_kpts)
-        assert len(crops) == len(batch_bboxes), "Number of crops and bboxes are not the same"
+        crops = self.crop_and_align_face(image, [batch_bboxes[0]], [batch_kpts[0]])
+        # assert len(crops) == len(batch_bboxes), "Number of crops and bboxes are not the same"
 
         # 3. get valid face -> List of List
         embeddings, valid_crops = self.validate_face(crops)
@@ -240,7 +237,10 @@ class FaceServiceV2(InterfaceService):
                 "message": "Detect fake face, please try again.",
                 "check": "false"
             }
-        check_batch = self.facedb.check_face(embeddings[0], thresh)
+        check_batch = self.facedb.check_face(
+            face_emb=embeddings[0], 
+            thresh=thresh, 
+            person_id=person_id)
         if len(check_batch) != 0:
             # check if exist any point equal to person_id
             for point in check_batch:
@@ -265,6 +265,10 @@ class FaceServiceV2(InterfaceService):
         """
         # 1. detect faces in each image -> List of List
         _, batch_bboxes, batch_kpts = self.detect_face(images=[image])
+        if len(batch_bboxes) == 0:
+            return {
+                "check_attendance": "Node to check attendance, please try again."
+            }
         # 2. crop and align face -> List of List
         crops = self.crop_and_align_face(image, batch_bboxes, batch_kpts)
         # 3. get valid face -> List of List
@@ -286,7 +290,11 @@ class FaceServiceV2(InterfaceService):
                     "bbox": batch_bboxes[index].tolist()
                 })
             else:
-                check_batch = self.facedb.check_face(emb, thresh)
+                check_batch = self.facedb.check_face(
+                    face_emb=emb, 
+                    thresh=thresh, 
+                    group_id=group_id
+                )
                 if len(check_batch) == 0:
                     dict_checked.append({
                         "face_id": "Unknown",
@@ -338,6 +346,10 @@ class FaceServiceV2(InterfaceService):
             return {
                 "message": f"Some images are invalid, only having one person per image.",  
             }
+        if len(bboxes) == 0 or len(kpts) == 0:
+            return {
+                "message": "No face detected, please try again.",
+            }
         # 2. crop and align face -> List of List
         batch_crops = []
         for i, image in enumerate(images):
@@ -378,3 +390,19 @@ class FaceServiceV2(InterfaceService):
         #     f"{key}": f"{crop_save_path}" for key, crop_save_path in zip(hashes, crop_save_paths)
         # } 
         return hash_in_db
+    
+    def sort_bbox_kpts(self, bbox: np.ndarray, keypoints: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+
+        areas = [((x2 - x1) * (y2 - y1)) for (x1, y1, x2, y2) in bbox]
+
+        # Ghép bbox với keypoints và diện tích lại với nhau
+        bbox_keypoint_area = list(zip(bbox, keypoints, areas))
+
+        # Sắp xếp theo diện tích (theo thứ tự tăng dần)
+        sorted_bbox_keypoint_area = sorted(bbox_keypoint_area, key=lambda x: x[2])
+
+        # Sau khi sắp xếp, ta tách lại bbox và keypoints
+        sorted_bbox = [item[0] for item in sorted_bbox_keypoint_area]
+        sorted_keypoints = [item[1] for item in sorted_bbox_keypoint_area]
+
+        return sorted_bbox, sorted_keypoints

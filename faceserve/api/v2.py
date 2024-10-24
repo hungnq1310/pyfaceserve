@@ -56,31 +56,31 @@ Router
 router = APIRouter(prefix="/v1")
 
 @router.post("/register")
-async def register(id: str, request: FaceRequest, group_id: str = "default"):
+async def register(person_id: str, request: FaceRequest, group_id: str = "default"):
     images = [base64.b64decode(x) for x in request.base64images]
-    images = [Image.open(BytesIO(x)) for x in images]
+    images = [Image.open(BytesIO(x)).convert("RGB") for x in images]
     hashes_path = service.register_face(
-        images=images, person_id=id, group_id=group_id, face_folder=FACES_IMG_DIR
+        images=images, person_id=person_id, group_id=group_id, face_folder=FACES_IMG_DIR
     )
     return JSONResponse(
         content=hashes_path, status_code=status.HTTP_200_OK
     )
 
 @router.post("/register/files")
-async def register_upload(files: list[UploadFile], id: str, group_id: str = "default"):
+async def register_upload(files: list[UploadFile], person_id: str, group_id: str = "default"):
     images = [Image.open(BytesIO(await x.read())).convert("RGB") for x in files]
     hashes_path = service.register_face(
-        images=images, person_id=id, group_id=group_id, face_folder=FACES_IMG_DIR
+        images=images, person_id=person_id, group_id=group_id, face_folder=FACES_IMG_DIR
     )
     return JSONResponse(
         content=hashes_path, status_code=status.HTTP_200_OK
     )
 
 @router.get("/faces")
-async def get_face_image(id: str|None = None, group_id: str|None = None):
-    if not FACES.list_faces(person_id=id, group_id=group_id)[0]:
+async def get_face_image(person_id: str|None = ..., group_id: str|None = ...):
+    if not FACES.list_faces(person_id=person_id, group_id=group_id)[0]:
         return []
-    res = [x for x in FACES.list_faces(person_id=id, group_id=group_id)[0] if x is not None]
+    res = [x for x in FACES.list_faces(person_id=person_id, group_id=group_id)[0] if x is not None]
     output = []
     for x in res:
         res_group = x.payload["group_id"]
@@ -90,40 +90,46 @@ async def get_face_image(id: str|None = None, group_id: str|None = None):
     return output
 
 @router.delete("/delete")
-async def delete_face(face_id: str|None = None, id: str|None = None, group_id: str|None = None):
+async def delete_face(face_id: str|None = None, person_id: str|None = None, group_id: str|None = None):
     message: dict = FACES.delete_face(
         face_id=face_id, 
-        person_id=id, 
+        person_id=person_id, 
         group_id=group_id
     )
     return JSONResponse(content=message, status_code=status.HTTP_200_OK)
 
 @router.post("/check/face")
-async def check_face_images(request: FaceRequest, id: str|None = None):
+async def check_face_images(
+    request: FaceRequest, 
+    person_id: str = ...,
+):
     images = [base64.b64decode(x) for x in request.base64images]
-    images = [Image.open(BytesIO(x)) for x in images]
+    images = [Image.open(BytesIO(x)).convert("RGB") for x in images]
     return [service.check_face(
         image=img, 
         thresh=RECOGNITION_THRESH, 
-        person_id=id, 
+        person_id=person_id, 
     ) for img in images]
 
 @router.post("/check/face/files")
 async def check_face_images(
     files: list[UploadFile], 
-    id: str|None = '0', 
+    person_id: str = ...,
 ):
     images = [Image.open(BytesIO(await x.read())).convert("RGB") for x in files]
     return [service.check_face(
         image=img, 
         thresh=RECOGNITION_THRESH, 
-        person_id=id, 
+        person_id=person_id,
     ) for img in images]
 
 @router.post("/check/attendance")
-async def check_face_images(request: FaceRequest, group_id: str|None = None):
+async def check_face_images(
+    request: FaceRequest, 
+    group_id: str|None = "default"
+):
     images = [base64.b64decode(x) for x in request.base64images]
-    images = [Image.open(BytesIO(x)) for x in images]
+    images = [Image.open(BytesIO(x)).convert("RGB") for x in images]
     return [service.check_attendance(
         image=img, 
         thresh=RECOGNITION_THRESH, 
